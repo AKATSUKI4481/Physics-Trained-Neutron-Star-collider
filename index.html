@@ -1,0 +1,3432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Real-Time Kilonova Visualization</title>
+    <style>
+      :root {
+        --panel-bg: rgba(6, 11, 24, 0.84);
+        --panel-bg-2: rgba(10, 19, 38, 0.74);
+        --panel-border: rgba(116, 168, 255, 0.34);
+        --text: #eaf2ff;
+        --muted: #a8bfdc;
+        --accent: #9fd6ff;
+        --accent-2: #72b5ff;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        font-family: "Avenir Next", "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+        color: var(--text);
+      }
+
+      #app {
+        position: fixed;
+        inset: 0;
+      }
+
+      #ui {
+        position: fixed;
+        top: 52px;
+        right: 12px;
+        width: min(360px, calc(100vw - 24px));
+        max-height: calc(100vh - 64px);
+        overflow-y: auto;
+        padding: 13px 12px 14px;
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        background: linear-gradient(165deg, var(--panel-bg), var(--panel-bg-2));
+        backdrop-filter: blur(14px);
+        box-shadow: 0 16px 44px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(170, 210, 255, 0.08);
+        z-index: 10;
+      }
+
+      #ui::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      #ui::-webkit-scrollbar-thumb {
+        background: rgba(132, 183, 255, 0.34);
+        border-radius: 99px;
+      }
+
+      #settingsToggle {
+        position: fixed;
+        right: 12px;
+        top: 12px;
+        z-index: 12;
+        border: 1px solid rgba(157, 196, 255, 0.55);
+        border-radius: 11px;
+        padding: 7px 11px;
+        background: linear-gradient(180deg, rgba(10, 18, 36, 0.9), rgba(10, 16, 31, 0.82));
+        color: #e8f0ff;
+        font-size: 12px;
+        letter-spacing: 0.02em;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+
+      #ui.collapsed {
+        display: none;
+      }
+
+      #ui h1 {
+        margin: 0 0 11px;
+        font-size: 15px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #d4e8ff;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .row + .row {
+        margin-top: 8px;
+      }
+
+      .buttons button {
+        flex: 1;
+      }
+
+      label {
+        display: block;
+        margin-top: 10px;
+        font-size: 11px;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+      }
+
+      .label-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 2px;
+      }
+
+      .value {
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+        font-size: 11px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent-2);
+      }
+
+      button,
+      select,
+      input[type="checkbox"] {
+        cursor: pointer;
+      }
+
+      button {
+        border: 1px solid rgba(157, 196, 255, 0.45);
+        border-radius: 9px;
+        padding: 6px 8px;
+        background: linear-gradient(180deg, rgba(67, 94, 144, 0.46), rgba(45, 67, 106, 0.38));
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      button:hover {
+        background: linear-gradient(180deg, rgba(91, 124, 181, 0.55), rgba(60, 84, 127, 0.44));
+      }
+
+      details {
+        margin-top: 12px;
+        border: 1px solid rgba(133, 178, 255, 0.22);
+        border-radius: 10px;
+        padding: 8px 9px 9px;
+        background: rgba(8, 13, 26, 0.42);
+      }
+
+      summary {
+        cursor: pointer;
+        color: #d7e7ff;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .hint {
+        margin: 7px 0 0;
+        font-size: 11px;
+        color: #b2c5e9;
+        line-height: 1.3;
+      }
+
+      #hud {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        padding: 8px 11px;
+        border-radius: 11px;
+        border: 1px solid rgba(140, 182, 255, 0.32);
+        background: rgba(4, 8, 18, 0.76);
+        font-size: 11px;
+        color: #d5e6ff;
+        z-index: 10;
+        font-variant-numeric: tabular-nums;
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
+        max-width: calc(100vw - 410px);
+        overflow-x: auto;
+      }
+
+      #hud::-webkit-scrollbar {
+        height: 6px;
+      }
+
+      #hud::-webkit-scrollbar-thumb {
+        background: rgba(132, 182, 255, 0.35);
+        border-radius: 999px;
+      }
+
+      .hud-item {
+        position: relative;
+        padding-right: 11px;
+        color: #d8e8ff;
+        white-space: nowrap;
+      }
+
+      .hud-item:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        right: 2px;
+        top: 50%;
+        width: 4px;
+        height: 4px;
+        margin-top: -2px;
+        border-radius: 999px;
+        background: rgba(124, 174, 255, 0.5);
+      }
+
+      #bootWarning {
+        position: fixed;
+        left: 50%;
+        top: 14px;
+        transform: translateX(-50%);
+        z-index: 20;
+        max-width: min(94vw, 760px);
+        padding: 9px 12px;
+        border: 1px solid rgba(255, 170, 170, 0.55);
+        border-radius: 10px;
+        background: rgba(56, 13, 13, 0.9);
+        color: #ffd4d4;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      @media (max-width: 760px) {
+        #ui {
+          width: calc(100vw - 18px);
+          right: 9px;
+          top: 46px;
+          max-height: calc(100vh - 56px);
+          font-size: 12px;
+        }
+
+        #settingsToggle {
+          right: 9px;
+          top: 9px;
+        }
+
+        #hud {
+          top: 9px;
+          left: 9px;
+          right: 88px;
+          max-width: none;
+          font-size: 10px;
+          gap: 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <button id="settingsToggle" type="button" aria-expanded="true">Hide Settings ⚙</button>
+
+    <div id="ui">
+      <h1>Kilonova Parameter Console</h1>
+
+      <div class="row buttons">
+        <button id="playPause">Pause</button>
+        <button id="restart">Restart</button>
+      </div>
+
+      <label>
+        <div class="label-top">
+          <span>Timeline</span>
+          <span class="value" id="timelineValue">0.0 s</span>
+        </div>
+        <input id="timeline" type="range" min="0" max="1000" step="1" value="0" />
+      </label>
+
+      <label>
+        <div class="label-top">
+          <span>Time Scale</span>
+          <span class="value" id="timeScaleValue">2.00x</span>
+        </div>
+        <input id="timeScale" type="range" min="0.1" max="4" step="0.01" value="2" />
+      </label>
+
+      <details open>
+        <summary>Astrophysical Parameters</summary>
+
+        <label>
+          <div class="label-top">
+            <span>Neutron Star Mass m1 (Msun)</span>
+            <span class="value" id="m1Value"></span>
+          </div>
+          <input id="m1" type="range" min="1.0" max="2.2" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Neutron Star Mass m2 (Msun)</span>
+            <span class="value" id="m2Value"></span>
+          </div>
+          <input id="m2" type="range" min="1.0" max="2.2" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Inspiral Separation Scale</span>
+            <span class="value" id="separationScaleValue"></span>
+          </div>
+          <input id="separationScale" type="range" min="0.75" max="1.40" step="0.01" value="1.40" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Ejecta Mass (Msun)</span>
+            <span class="value" id="ejectaMassValue"></span>
+          </div>
+          <input id="ejectaMass" type="range" min="0.01" max="0.20" step="0.001" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Polar Velocity (c)</span>
+            <span class="value" id="polarVelValue"></span>
+          </div>
+          <input id="polarVel" type="range" min="0.15" max="0.45" step="0.001" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Equatorial Velocity (c)</span>
+            <span class="value" id="eqVelValue"></span>
+          </div>
+          <input id="eqVel" type="range" min="0.05" max="0.20" step="0.001" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Opacity Contrast</span>
+            <span class="value" id="opacityContrastValue"></span>
+          </div>
+          <input id="opacityContrast" type="range" min="0.5" max="2.5" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>RT Instability Strength</span>
+            <span class="value" id="rtStrengthValue"></span>
+          </div>
+          <input id="rtStrength" type="range" min="0.0" max="3.0" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Jet Angle (deg)</span>
+            <span class="value" id="jetAngleValue"></span>
+          </div>
+          <input id="jetAngle" type="range" min="5" max="30" step="0.1" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Jet Intensity</span>
+            <span class="value" id="jetIntensityValue"></span>
+          </div>
+          <input id="jetIntensity" type="range" min="0" max="3" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Remnant Luminosity</span>
+            <span class="value" id="remnantLumValue"></span>
+          </div>
+          <input id="remnantLum" type="range" min="0" max="3" step="0.01" />
+        </label>
+      </details>
+
+      <details open>
+        <summary>Imaging Pipeline</summary>
+
+        <label>
+          <div class="label-top">
+            <span>Bloom Strength</span>
+            <span class="value" id="bloomStrengthValue"></span>
+          </div>
+          <input id="bloomStrength" type="range" min="0" max="3" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Chromatic Aberration</span>
+            <span class="value" id="chromaticAberrationValue"></span>
+          </div>
+          <input id="chromaticAberration" type="range" min="0" max="2.0" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Image Sharpening</span>
+            <span class="value" id="sharpenValue"></span>
+          </div>
+          <input id="sharpen" type="range" min="0" max="2.0" step="0.01" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Auto Quality</span>
+            <span class="value" id="autoQualityValue">Off</span>
+          </div>
+          <input id="autoQuality" type="checkbox" />
+        </label>
+
+        <label>
+          <div class="label-top">
+            <span>Manual Quality Tier</span>
+            <span class="value" id="qualityTierValue"></span>
+          </div>
+          <input id="qualityTier" type="range" min="0" max="3" step="1" />
+        </label>
+      </details>
+    </div>
+
+    <div id="hud">
+      <div class="hud-item" id="hudAct"></div>
+      <div class="hud-item" id="hudSim"></div>
+      <div class="hud-item" id="hudPhys"></div>
+      <div class="hud-item" id="hudFPS"></div>
+      <div class="hud-item" id="hudQuality"></div>
+      <div class="hud-item" id="hudSteps"></div>
+    </div>
+    <div id="bootWarning" hidden>
+      Renderer did not initialize. Check browser console for errors and ensure CDN scripts can load.
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script>
+      window.__kilonovaBooted = false;
+      window.addEventListener("DOMContentLoaded", () => {
+        window.setTimeout(() => {
+          if (!window.__kilonovaBooted) {
+            const warning = document.getElementById("bootWarning");
+            if (warning) {
+              warning.hidden = false;
+            }
+          }
+        }, 1600);
+      });
+    </script>
+
+    <script>
+      if (!window.THREE) {
+        throw new Error("THREE failed to load from CDN.");
+      }
+
+      window.__kilonovaBooted = true;
+      const bootWarningEl = document.getElementById("bootWarning");
+      if (bootWarningEl) {
+        bootWarningEl.hidden = true;
+      }
+
+      const app = document.getElementById("app");
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      app.appendChild(renderer.domElement);
+      renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
+
+      const scene = new THREE.Scene();
+      const defaultBackgroundColor = new THREE.Color(0x02040a);
+      scene.background = defaultBackgroundColor;
+      const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.05, 400);
+      camera.position.set(31.0, 6.2, 0.0);
+
+      class SimpleOrbitControls {
+        constructor(cam, domElement) {
+          this.camera = cam;
+          this.domElement = domElement;
+          this.target = new THREE.Vector3();
+          this.enableDamping = true;
+          this.dampingFactor = 0.08;
+          this.minDistance = 2.8;
+          this.maxDistance = 85;
+          this.rotateSpeed = 0.005;
+          this.zoomSpeed = 0.0018;
+          this.panSpeed = 0.0018;
+
+          this._state = 0;
+          this._lastX = 0;
+          this._lastY = 0;
+          this._spherical = new THREE.Spherical();
+          this._sphericalDelta = new THREE.Spherical(0, 0, 0);
+          this._panOffset = new THREE.Vector3();
+          this._offset = new THREE.Vector3();
+          this._right = new THREE.Vector3();
+          this._up = new THREE.Vector3();
+
+          this._updateSphericalFromCamera();
+          this._bind();
+        }
+
+        _updateSphericalFromCamera() {
+          this._offset.copy(this.camera.position).sub(this.target);
+          this._spherical.setFromVector3(this._offset);
+          this._spherical.makeSafe();
+        }
+
+        _bind() {
+          this.domElement.addEventListener("pointerdown", (e) => {
+            if (e.button === 0) {
+              this._state = 1;
+            } else if (e.button === 2) {
+              this._state = 2;
+            } else {
+              this._state = 0;
+            }
+            this._lastX = e.clientX;
+            this._lastY = e.clientY;
+          });
+
+          window.addEventListener("pointerup", () => {
+            this._state = 0;
+          });
+
+          window.addEventListener("pointermove", (e) => {
+            if (this._state === 0) {
+              return;
+            }
+            const dx = e.clientX - this._lastX;
+            const dy = e.clientY - this._lastY;
+            this._lastX = e.clientX;
+            this._lastY = e.clientY;
+
+            if (this._state === 1) {
+              this._sphericalDelta.theta -= dx * this.rotateSpeed;
+              this._sphericalDelta.phi -= dy * this.rotateSpeed;
+            } else if (this._state === 2) {
+              this.camera.updateMatrixWorld();
+              const te = this.camera.matrix.elements;
+              this._right.set(te[0], te[1], te[2]).normalize();
+              this._up.set(te[4], te[5], te[6]).normalize();
+              const dist = this.camera.position.distanceTo(this.target);
+              const scale = dist * this.panSpeed;
+              this._panOffset.addScaledVector(this._right, -dx * scale);
+              this._panOffset.addScaledVector(this._up, dy * scale);
+            }
+          });
+
+          this.domElement.addEventListener(
+            "wheel",
+            (e) => {
+              e.preventDefault();
+              this._spherical.radius *= Math.exp(e.deltaY * this.zoomSpeed);
+              this._spherical.radius = Math.min(this.maxDistance, Math.max(this.minDistance, this._spherical.radius));
+            },
+            { passive: false }
+          );
+        }
+
+        update() {
+          this._spherical.theta += this._sphericalDelta.theta;
+          this._spherical.phi += this._sphericalDelta.phi;
+          this._spherical.makeSafe();
+          this._spherical.radius = Math.min(this.maxDistance, Math.max(this.minDistance, this._spherical.radius));
+          this.target.add(this._panOffset);
+          this._offset.setFromSpherical(this._spherical);
+          this.camera.position.copy(this.target).add(this._offset);
+          this.camera.lookAt(this.target);
+
+          if (this.enableDamping) {
+            const damp = 1.0 - this.dampingFactor;
+            this._sphericalDelta.theta *= damp;
+            this._sphericalDelta.phi *= damp;
+            this._panOffset.multiplyScalar(damp);
+          } else {
+            this._sphericalDelta.theta = 0;
+            this._sphericalDelta.phi = 0;
+            this._panOffset.set(0, 0, 0);
+          }
+        }
+      }
+
+      const controls = new SimpleOrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0.0, 0);
+
+      const rtType = renderer.capabilities.isWebGL2 ? THREE.HalfFloatType : THREE.UnsignedByteType;
+      const baseTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+        type: rtType,
+        format: THREE.RGBAFormat,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        depthBuffer: true,
+      });
+
+      const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const postGeometry = new THREE.PlaneGeometry(2, 2);
+
+      function createColorTarget(width, height) {
+        return new THREE.WebGLRenderTarget(width, height, {
+          type: rtType,
+          format: THREE.RGBAFormat,
+          minFilter: THREE.LinearFilter,
+          magFilter: THREE.LinearFilter,
+          depthBuffer: false,
+        });
+      }
+
+      const volumeScaleByTier = [0.70, 0.62, 0.54, 0.48];
+      let currentVolumeScale = volumeScaleByTier[0];
+      function getVolumeDimensions(width, height) {
+        return {
+          w: Math.max(2, Math.floor(width * currentVolumeScale)),
+          h: Math.max(2, Math.floor(height * currentVolumeScale)),
+        };
+      }
+
+      const initialVolSize = getVolumeDimensions(window.innerWidth, window.innerHeight);
+      const volumeCurrentTarget = createColorTarget(initialVolSize.w, initialVolSize.h);
+      const volumeHistoryTargetA = createColorTarget(initialVolSize.w, initialVolSize.h);
+      const volumeHistoryTargetB = createColorTarget(initialVolSize.w, initialVolSize.h);
+      let volumeHistoryRead = volumeHistoryTargetA;
+      let volumeHistoryWrite = volumeHistoryTargetB;
+
+      function swapVolumeHistoryTargets() {
+        const temp = volumeHistoryRead;
+        volumeHistoryRead = volumeHistoryWrite;
+        volumeHistoryWrite = temp;
+      }
+
+      const fullscreenVertex = /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position.xy, 0.0, 1.0);
+        }
+      `;
+
+      const volumeShader = {
+        uniforms: {
+          uResolution: { value: new THREE.Vector2(initialVolSize.w, initialVolSize.h) },
+          uCamPos: { value: new THREE.Vector3() },
+          uInvProj: { value: new THREE.Matrix4() },
+          uInvView: { value: new THREE.Matrix4() },
+          uTime: { value: 0 },
+          uAct: { value: 1.0 },
+          uAct2Progress: { value: 0.0 },
+          uAct3Progress: { value: 0.0 },
+          uDays: { value: 0.03 },
+          uCollisionFlash: { value: 0.0 },
+          uEnergyScale: { value: 1.0 },
+          uEjectaMass: { value: 0.05 },
+          uPolarVel: { value: 0.30 },
+          uEqVel: { value: 0.10 },
+          uOpacityContrast: { value: 1.4 },
+          uRTStrength: { value: 1.1 },
+          uJetAngle: { value: 9.5 },
+          uJetIntensity: { value: 1.8 },
+          uRemnantLum: { value: 1.1 },
+          uSteps: { value: 140.0 },
+          uNoiseOctaves: { value: 5.0 },
+          uStepScale: { value: 1.0 },
+          uNoiseScale: { value: 1.0 },
+        },
+        vertexShader: fullscreenVertex,
+        fragmentShader: /* glsl */ `
+          precision highp float;
+
+          varying vec2 vUv;
+          uniform vec2 uResolution;
+          uniform vec3 uCamPos;
+          uniform mat4 uInvProj;
+          uniform mat4 uInvView;
+          uniform float uTime;
+          uniform float uAct;
+          uniform float uAct2Progress;
+          uniform float uAct3Progress;
+          uniform float uDays;
+          uniform float uCollisionFlash;
+          uniform float uEnergyScale;
+          uniform float uEjectaMass;
+          uniform float uPolarVel;
+          uniform float uEqVel;
+          uniform float uOpacityContrast;
+          uniform float uRTStrength;
+          uniform float uJetAngle;
+          uniform float uJetIntensity;
+          uniform float uRemnantLum;
+          uniform float uSteps;
+          uniform float uNoiseOctaves;
+          uniform float uStepScale;
+          uniform float uNoiseScale;
+
+          #define MAX_STEPS 144
+
+          float hash11(float p) {
+            p = fract(p * 0.1031);
+            p *= p + 33.33;
+            p *= p + p;
+            return fract(p);
+          }
+
+          float hash31(vec3 p3) {
+            p3 = fract(p3 * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+          }
+
+          float noise3(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+
+            float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
+            float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
+            float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
+            float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
+            float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
+            float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
+            float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
+            float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
+
+            float nx00 = mix(n000, n100, f.x);
+            float nx10 = mix(n010, n110, f.x);
+            float nx01 = mix(n001, n101, f.x);
+            float nx11 = mix(n011, n111, f.x);
+
+            float nxy0 = mix(nx00, nx10, f.y);
+            float nxy1 = mix(nx01, nx11, f.y);
+
+            return mix(nxy0, nxy1, f.z);
+          }
+
+          float fbm(vec3 p, float octaves) {
+            float sum = 0.0;
+            float amp = 0.5;
+            float freq = 1.0;
+            for (int i = 0; i < 6; i++) {
+              if (float(i) >= octaves) {
+                break;
+              }
+              sum += amp * noise3(p * freq);
+              freq *= 2.0;
+              amp *= 0.5;
+            }
+            return sum;
+          }
+
+          vec3 kelvinToRGB(float tempK) {
+            float t = clamp(tempK, 1200.0, 40000.0) / 100.0;
+            float r;
+            float g;
+            float b;
+
+            if (t <= 66.0) {
+              r = 1.0;
+              g = clamp(0.39008158 * log(max(t, 1e-3)) - 0.63184144, 0.0, 1.0);
+            } else {
+              float tt = t - 60.0;
+              r = clamp(1.29293619 * pow(tt, -0.13320476), 0.0, 1.0);
+              g = clamp(1.12989086 * pow(tt, -0.07551485), 0.0, 1.0);
+            }
+
+            if (t >= 66.0) {
+              b = 1.0;
+            } else if (t <= 19.0) {
+              b = 0.0;
+            } else {
+              b = clamp(0.54320679 * log(t - 10.0) - 1.19625409, 0.0, 1.0);
+            }
+
+            return vec3(r, g, b);
+          }
+
+          vec2 raySphere(vec3 ro, vec3 rd, float radius) {
+            float b = dot(ro, rd);
+            float c = dot(ro, ro) - radius * radius;
+            float h = b * b - c;
+            if (h < 0.0) {
+              return vec2(1e9, -1e9);
+            }
+            h = sqrt(h);
+            return vec2(-b - h, -b + h);
+          }
+
+          float hgPhase(float mu, float g) {
+            float g2 = g * g;
+            float denom = pow(max(1e-4, 1.0 + g2 - 2.0 * g * mu), 1.5);
+            return (1.0 - g2) / (12.56637061 * denom);
+          }
+
+          float thermalizationEff(float tDay, float tTherm) {
+            float t = max(tDay, 1e-4);
+            return 0.35 + 0.65 / (1.0 + pow(t / max(tTherm, 1e-3), 0.9));
+          }
+
+          float diffusionTimeDays(float massNorm, float vFrac, float kappa, float tTherm) {
+            float m = max(massNorm, 1e-5);
+            float v = max(vFrac, 0.035);
+            float kap = max(kappa, 0.12);
+            float pref = 0.34 + 0.42 * tTherm;
+            return clamp(pref * sqrt((kap * m) / v), 0.05, 14.0);
+          }
+
+          float componentTemperature(float massNorm, float vFrac, float tDay, float kappa, float tTherm, float scaleK) {
+            float t = max(tDay, 0.03);
+            float q = pow(t, -1.3);
+            float tDiff = diffusionTimeDays(massNorm, vFrac, kappa, tTherm);
+            float diffRelease = 1.0 - exp(-pow(t / max(tDiff, 1e-3), 1.18));
+            float photoRecede = smoothstep(0.75 * tDiff, 4.3 * tDiff, t);
+            float fth = thermalizationEff(t, tTherm);
+            float lum = max(1e-5, massNorm * q * fth * (0.86 + 0.14 * diffRelease));
+            float r = max(0.35, vFrac * t * 12.0 * mix(1.08, 0.74, photoRecede));
+            float reproc = pow(1.0 + kappa * pow(t, 0.28), -0.18) * mix(0.94, 1.05, diffRelease);
+            float temp = scaleK * pow(lum / max(r * r, 1e-5), 0.25) * reproc;
+            return clamp(temp, 1800.0, 18000.0);
+          }
+
+          vec3 applyTauColorFilter(vec3 bb, float tauLike) {
+            float t = clamp(tauLike, 0.0, 60.0);
+            vec3 filt = vec3(
+              exp(-0.035 * t),
+              exp(-0.085 * t),
+              exp(-0.215 * t)
+            );
+            return bb * filt;
+          }
+
+          float planckBand(float tempK, float lambdaNm) {
+            float t = max(tempK, 1200.0);
+            float x = 1.438777e7 / max(lambdaNm * t, 1e-3);
+            float invL5 = 1.0 / max(pow(lambdaNm, 5.0), 1e-20);
+            return invL5 / max(exp(min(x, 60.0)) - 1.0, 1e-6);
+          }
+
+          vec3 xyzToLinearSRGB(vec3 xyz) {
+            vec3 rgb;
+            rgb.r = 3.2406 * xyz.x - 1.5372 * xyz.y - 0.4986 * xyz.z;
+            rgb.g = -0.9689 * xyz.x + 1.8758 * xyz.y + 0.0415 * xyz.z;
+            rgb.b = 0.0557 * xyz.x - 0.2040 * xyz.y + 1.0570 * xyz.z;
+            return max(rgb, vec3(0.0));
+          }
+
+          vec3 pseudoSpectralColor(float tempK, float tauRef, float yE, float recombFrac) {
+            float lanth = clamp((0.30 - yE) / 0.16, 0.0, 1.0);
+            float ionized = 1.0 - clamp(recombFrac, 0.0, 1.0);
+            float tau0 = max(tauRef, 0.0) * (0.66 + 1.30 * lanth) * (1.0 + 0.40 * recombFrac);
+            float recombKink = smoothstep(0.28, 0.92, recombFrac);
+            float lanthKink = recombKink * (0.35 + 0.65 * lanth);
+
+            // 7-band transport surrogate (UV to NIR) for smoother color evolution.
+            float b1 = planckBand(tempK, 340.0);
+            float b2 = planckBand(tempK, 410.0);
+            float b3 = planckBand(tempK, 480.0);
+            float b4 = planckBand(tempK, 560.0);
+            float b5 = planckBand(tempK, 650.0);
+            float b6 = planckBand(tempK, 780.0);
+            float b7 = planckBand(tempK, 980.0);
+
+            float k1 = (2.35 + 0.98 * lanth) * (1.0 + 0.52 * recombFrac);
+            float k2 = (1.78 + 0.78 * lanth) * (1.0 + 0.42 * recombFrac);
+            float k3 = (1.26 + 0.56 * lanth) * (1.0 + 0.28 * recombFrac);
+            float k4 = (0.98 + 0.34 * lanth) * (1.0 + 0.16 * recombFrac);
+            float k5 = (0.78 + 0.17 * lanth) * (0.92 + 0.08 * ionized);
+            float k6 = (0.62 + 0.12 * lanth) * (0.90 + 0.10 * ionized);
+            float k7 = (0.48 + 0.09 * lanth) * (0.88 + 0.12 * ionized);
+
+            // Recombination-driven line blanketing increase: sharp blue suppression, softer NIR response.
+            k1 *= 1.0 + 0.62 * lanthKink;
+            k2 *= 1.0 + 0.52 * lanthKink;
+            k3 *= 1.0 + 0.38 * lanthKink;
+            k4 *= 1.0 + 0.24 * lanthKink;
+            k5 *= 1.0 + 0.08 * lanthKink;
+            k6 *= max(0.28, 1.0 - 0.10 * lanthKink);
+            k7 *= max(0.26, 1.0 - 0.14 * lanthKink);
+
+            float t1 = exp(-tau0 * k1);
+            float t2 = exp(-tau0 * k2);
+            float t3 = exp(-tau0 * k3);
+            float t4 = exp(-tau0 * k4);
+            float t5 = exp(-tau0 * k5);
+            float t6 = exp(-tau0 * k6);
+            float t7 = exp(-tau0 * k7);
+
+            float f1 = b1 * t1;
+            float f2 = b2 * t2;
+            float f3 = b3 * t3;
+            float f4 = b4 * t4;
+            float f5 = b5 * t5;
+            float f6 = b6 * t6;
+            float f7 = b7 * t7;
+
+            float absorbedBlue = b1 * (1.0 - t1) + 0.92 * b2 * (1.0 - t2) + 0.66 * b3 * (1.0 - t3) + 0.34 * b4 * (1.0 - t4);
+            float lineRedistrib = (0.16 + 0.54 * recombFrac) * (0.58 + 0.42 * lanth);
+            f5 += absorbedBlue * (0.22 + 0.18 * lineRedistrib);
+            f6 += absorbedBlue * (0.18 + 0.24 * lineRedistrib);
+            f7 += absorbedBlue * (0.11 + 0.30 * lineRedistrib);
+
+            // Approximate 7-band -> CIE XYZ integration (band centers in nm: 340,410,480,560,650,780,980).
+            // UV/NIR bands are visibility-weighted down for display-space realism.
+            float v1 = 0.14;
+            float v2 = 1.00;
+            float v3 = 1.00;
+            float v4 = 1.00;
+            float v5 = 1.00;
+            float v6 = 0.22;
+            float v7 = 0.03;
+
+            float X =
+              v1 * f1 * 0.0032 +
+              v2 * f2 * 0.0435 +
+              v3 * f3 * 0.0956 +
+              v4 * f4 * 0.5945 +
+              v5 * f5 * 0.2835 +
+              v6 * f6 * 0.0001 +
+              v7 * f7 * 0.0000;
+            float Y =
+              v1 * f1 * 0.0001 +
+              v2 * f2 * 0.0012 +
+              v3 * f3 * 0.1390 +
+              v4 * f4 * 0.9950 +
+              v5 * f5 * 0.1070 +
+              v6 * f6 * 0.0000 +
+              v7 * f7 * 0.0000;
+            float Z =
+              v1 * f1 * 0.0138 +
+              v2 * f2 * 0.2074 +
+              v3 * f3 * 0.8130 +
+              v4 * f4 * 0.0039 +
+              v5 * f5 * 0.0000 +
+              v6 * f6 * 0.0000 +
+              v7 * f7 * 0.0000;
+
+            vec3 rgb = xyzToLinearSRGB(vec3(X, Y, Z));
+
+            float lum = max(Y, 1e-6);
+            rgb /= lum;
+            float sat = mix(0.90, 1.10, smoothstep(2200.0, 9200.0, tempK));
+            rgb = mix(vec3(1.0), rgb, sat);
+            return max(rgb, vec3(0.0));
+          }
+
+          vec3 applyTintLumConserve(vec3 baseCol, vec3 tint, float strength) {
+            float s = clamp(strength, 0.0, 1.0);
+            vec3 target = baseCol * mix(vec3(1.0), max(tint, vec3(0.0)), s);
+            vec3 lumW = vec3(0.2126, 0.7152, 0.0722);
+            float l0 = max(dot(baseCol, lumW), 1e-5);
+            float l1 = max(dot(target, lumW), 1e-5);
+            return target * (l0 / l1);
+          }
+
+          vec3 lineEmissionTint(float tDay, float yE, float tauRef, float tempK) {
+            float lanth = clamp((0.30 - yE) / 0.16, 0.0, 1.0);
+            float ionized = smoothstep(3200.0, 6800.0, tempK);
+            float recomb = 1.0 - ionized;
+            float earlyBlue = exp(-tDay / 0.45) * (1.0 - lanth);
+            float midLine = smoothstep(0.22, 1.3, tDay) * (1.0 - smoothstep(2.7, 7.2, tDay));
+            float lateNir = smoothstep(0.9, 6.8, tDay);
+            float blanketing = 1.0 - exp(-max(tauRef, 0.0) * (0.35 + 0.55 * lanth));
+            vec3 tintBlue = vec3(0.94, 1.06, 1.26);
+            vec3 tintMid = vec3(1.03, 0.90, 0.99);
+            vec3 tintLate = vec3(1.20, 0.74, 0.46);
+            vec3 tint = vec3(1.0);
+            tint *= mix(vec3(1.0), tintBlue, 0.22 * earlyBlue * (0.62 + 0.38 * ionized));
+            tint *= mix(vec3(1.0), tintMid, 0.14 * midLine * (0.40 + 0.60 * blanketing));
+            tint *= mix(vec3(1.0), tintLate, 0.40 * lateNir * (0.36 + 0.64 * lanth) * (0.42 + 0.58 * recomb));
+            return tint;
+          }
+
+          void main() {
+            vec3 accum = vec3(0.0);
+
+            if (uAct >= 1.5) {
+              vec2 ndc = vUv * 2.0 - 1.0;
+              vec4 clip = vec4(ndc, 1.0, 1.0);
+              vec4 view = uInvProj * clip;
+              view /= max(view.w, 1e-6);
+              vec3 rd = normalize((uInvView * vec4(view.xyz, 0.0)).xyz);
+              vec3 ro = uCamPos;
+
+              float jetDomainBoost = clamp(uJetIntensity / 3.0, 0.0, 1.0);
+              float boundRadius = mix(18.0 + 7.0 * uEnergyScale, 24.0 + 12.0 * uEnergyScale + 9.0 * jetDomainBoost, smoothstep(0.0, 1.0, uAct3Progress));
+              vec2 hit = raySphere(ro, rd, boundRadius);
+              if (hit.x <= hit.y) {
+                float distToCenter = length(vUv - vec2(0.5));
+                float centerFocus = 1.0 - smoothstep(0.12, 0.86, distToCenter);
+                float peripheryFactor = mix(0.42, 1.0, centerFocus);
+                float earlyBurst = uAct < 2.5 ? (0.86 + 0.78 * (1.0 - uAct2Progress)) : (1.0 + 0.40 * exp(-uAct3Progress * 5.0));
+                float localSteps = floor(max(20.0, uSteps * uStepScale * peripheryFactor * earlyBurst));
+                float localOctaves = max(2.0, floor(uNoiseOctaves * uNoiseScale * mix(0.55, 1.0, centerFocus)));
+
+                float tNear = max(hit.x, 0.0);
+                float tFar = hit.y;
+                float totalDist = max(1e-4, tFar - tNear);
+                float dt = totalDist / max(1.0, localSteps);
+                float jitter = (hash11(dot(vUv, vec2(113.17, 91.73)) + uTime) - 0.5) * dt;
+
+                float evo = clamp(uAct3Progress, 0.0, 1.0);
+                float mNorm = clamp((uEjectaMass - 0.01) / 0.19, 0.0, 1.0);
+                float densityScale = mix(0.6, 2.0, mNorm);
+                float opacityScale = mix(0.7, 2.6, mNorm);
+                float vpScale = uPolarVel / 0.30;
+                float veScale = uEqVel / 0.10;
+
+                float Rp = mix(1.1, 13.2 * uEnergyScale * vpScale, pow(evo, 0.78));
+                float Re = mix(0.95, 9.1 * uEnergyScale * veScale, pow(evo, 0.88));
+                float thickP = mix(0.32, 1.05, evo);
+                float thickE = mix(0.42, 1.42, evo);
+                float fsScale = 14.4 * uEnergyScale * mix(vpScale, veScale, 0.34) + 2.1;
+                float cdScale = 12.1 * uEnergyScale * mix(vpScale, veScale, 0.42) + 1.6;
+                float rsScale = 9.1 * uEnergyScale * mix(vpScale, veScale, 0.54) + 1.2;
+
+                float tDays = max(uDays, 0.03);
+                float maxLtDelay = min(1.85, totalDist * 0.034);
+                float tDaysFar = max(0.03, tDays - maxLtDelay);
+                float massSkew = clamp((uPolarVel - uEqVel) / max(uPolarVel + uEqVel, 1e-4), -0.6, 0.6);
+                float fracPolar = clamp(0.24 + 0.08 * massSkew + 0.05 * clamp(uJetIntensity / 3.0, 0.0, 1.0), 0.14, 0.42);
+                float fracCocoon = clamp(0.16 + 0.05 * clamp(uJetIntensity / 3.0, 0.0, 1.0), 0.10, 0.28);
+                float fracEq = max(0.28, 1.0 - fracPolar - fracCocoon);
+                float fracSum = max(fracPolar + fracEq + fracCocoon, 1e-4);
+                fracPolar /= fracSum;
+                fracEq /= fracSum;
+                fracCocoon /= fracSum;
+                float massPolar = uEjectaMass * fracPolar;
+                float massEq = uEjectaMass * fracEq;
+                float massCocoon = uEjectaMass * fracCocoon;
+                float velCocoon = mix(uPolarVel, uEqVel, 0.45);
+                float yEPolarNear = clamp(0.34 - 0.03 * smoothstep(0.02, 0.90, tDays), 0.25, 0.36);
+                float yEEqNear = clamp(0.17 + 0.01 * exp(-tDays / 1.4), 0.14, 0.19);
+                float yECocoonNear = clamp(0.24 + 0.02 * exp(-tDays / 0.8), 0.21, 0.28);
+                float yEPolarFar = clamp(0.34 - 0.03 * smoothstep(0.02, 0.90, tDaysFar), 0.25, 0.36);
+                float yEEqFar = clamp(0.17 + 0.01 * exp(-tDaysFar / 1.4), 0.14, 0.19);
+                float yECocoonFar = clamp(0.24 + 0.02 * exp(-tDaysFar / 0.8), 0.21, 0.28);
+                float lanthPolarNear = smoothstep(0.30, 0.18, yEPolarNear);
+                float lanthEqNear = smoothstep(0.30, 0.18, yEEqNear);
+                float lanthCocoonNear = smoothstep(0.30, 0.18, yECocoonNear);
+                float lanthPolarFar = smoothstep(0.30, 0.18, yEPolarFar);
+                float lanthEqFar = smoothstep(0.30, 0.18, yEEqFar);
+                float lanthCocoonFar = smoothstep(0.30, 0.18, yECocoonFar);
+                float kappaPolarNear = mix(0.45, 1.20, lanthPolarNear);
+                float kappaEqNear = mix(4.5, 12.5, lanthEqNear);
+                float kappaCocoonNear = mix(1.2, 4.2, lanthCocoonNear);
+                float kappaPolarFar = mix(0.45, 1.20, lanthPolarFar);
+                float kappaEqFar = mix(4.5, 12.5, lanthEqFar);
+                float kappaCocoonFar = mix(1.2, 4.2, lanthCocoonFar);
+                float tauPolarNear = clamp((kappaPolarNear * massPolar) / max(pow(max(uPolarVel, 0.05) * tDays, 2.0), 1e-4), 0.02, 14.0);
+                float tauEqNear = clamp((kappaEqNear * massEq) / max(pow(max(uEqVel, 0.04) * tDays, 2.0), 1e-4), 0.04, 46.0);
+                float tauCocoonNear = clamp((kappaCocoonNear * massCocoon) / max(pow(max(velCocoon, 0.05) * tDays, 2.0), 1e-4), 0.03, 24.0);
+                float tauPolarFar = clamp((kappaPolarFar * massPolar) / max(pow(max(uPolarVel, 0.05) * tDaysFar, 2.0), 1e-4), 0.02, 14.0);
+                float tauEqFar = clamp((kappaEqFar * massEq) / max(pow(max(uEqVel, 0.04) * tDaysFar, 2.0), 1e-4), 0.04, 46.0);
+                float tauCocoonFar = clamp((kappaCocoonFar * massCocoon) / max(pow(max(velCocoon, 0.05) * tDaysFar, 2.0), 1e-4), 0.03, 24.0);
+                float tDiffPolarNear = diffusionTimeDays(massPolar, uPolarVel, kappaPolarNear, 0.9);
+                float tDiffEqNear = diffusionTimeDays(massEq, uEqVel, kappaEqNear, 1.8);
+                float tDiffCocoonNear = diffusionTimeDays(massCocoon, velCocoon, kappaCocoonNear, 1.1);
+                float tDiffPolarFar = diffusionTimeDays(massPolar, uPolarVel, kappaPolarFar, 0.9);
+                float tDiffEqFar = diffusionTimeDays(massEq, uEqVel, kappaEqFar, 1.8);
+                float tDiffCocoonFar = diffusionTimeDays(massCocoon, velCocoon, kappaCocoonFar, 1.1);
+                float tDiffMixNear = tDiffPolarNear * 0.30 + tDiffEqNear * 0.52 + tDiffCocoonNear * 0.18;
+                float tDiffMixFar = tDiffPolarFar * 0.30 + tDiffEqFar * 0.52 + tDiffCocoonFar * 0.18;
+                float collisionCore = uAct < 2.5 ? 1.0 - smoothstep(0.55, 1.0, uAct2Progress) : exp(-evo * 6.5);
+                float viewJetAlign = abs(rd.z);
+                float viewEqSight = pow(max(0.0, 1.0 - abs(rd.z)), 1.15);
+                float promptBeam = pow(viewJetAlign, 2.6);
+                float promptVisibility = mix(0.44, 1.0, promptBeam);
+                float jetLaunch = uAct < 2.5 ? (0.40 + 0.60 * uAct2Progress) : (1.0 - 0.35 * smoothstep(0.0, 1.0, evo));
+                float jetPersist = uAct < 2.5 ? 1.0 : (0.82 + 0.18 * exp(-evo * 2.6));
+                float jetStrength = uJetIntensity * jetLaunch * jetPersist * (1.20 + 0.55 * collisionCore);
+
+                float phaseBlueNear = 1.0 - smoothstep(0.05, 1.25, tDays);
+                float phasePurpleNear = 0.55 * smoothstep(0.08, 0.55, tDays) * (1.0 - smoothstep(1.4, 3.4, tDays));
+                float phaseRedNear = smoothstep(0.30, 6.0, tDays);
+                float phaseCloudEarlyNear = smoothstep(0.03, 0.16, tDays) * (1.0 - smoothstep(0.9, 3.2, tDays));
+                float phaseNebulaNear = smoothstep(0.10, 1.8, tDays) * (0.60 + 0.40 * smoothstep(0.22, 0.75, evo));
+
+                float phaseBlueFar = 1.0 - smoothstep(0.05, 1.25, tDaysFar);
+                float phasePurpleFar = 0.55 * smoothstep(0.08, 0.55, tDaysFar) * (1.0 - smoothstep(1.4, 3.4, tDaysFar));
+                float phaseRedFar = smoothstep(0.30, 6.0, tDaysFar);
+                float phaseCloudEarlyFar = smoothstep(0.03, 0.16, tDaysFar) * (1.0 - smoothstep(0.9, 3.2, tDaysFar));
+                float phaseNebulaFar = smoothstep(0.10, 1.8, tDaysFar) * (0.60 + 0.40 * smoothstep(0.22, 0.75, evo));
+
+                float TpolarNear = componentTemperature(massPolar, uPolarVel, tDays, kappaPolarNear, 0.9, 17200.0);
+                float TeqNear = componentTemperature(massEq, uEqVel, tDays, kappaEqNear, 1.8, 14800.0);
+                float TcocoonNear = componentTemperature(massCocoon, velCocoon, tDays, kappaCocoonNear, 1.1, 16500.0);
+                float TcloudEarlyNear = mix(TcocoonNear, TpolarNear, 0.63);
+                float TcloudLateNear = mix(TeqNear, TcocoonNear, 0.35);
+
+                float TpolarFar = componentTemperature(massPolar, uPolarVel, tDaysFar, kappaPolarFar, 0.9, 17200.0);
+                float TeqFar = componentTemperature(massEq, uEqVel, tDaysFar, kappaEqFar, 1.8, 14800.0);
+                float TcocoonFar = componentTemperature(massCocoon, velCocoon, tDaysFar, kappaCocoonFar, 1.1, 16500.0);
+                float TcloudEarlyFar = mix(TcocoonFar, TpolarFar, 0.63);
+                float TcloudLateFar = mix(TeqFar, TcocoonFar, 0.35);
+
+                float TphotoNear = mix(TpolarNear, TeqNear, 0.58);
+                float TphotoFar = mix(TpolarFar, TeqFar, 0.58);
+                float TagNear = mix(TpolarNear + 3000.0, TcocoonNear + 2200.0, 0.55);
+                float TagFar = mix(TpolarFar + 3000.0, TcocoonFar + 2200.0, 0.55);
+                float recombEqKinkNear = 1.0 - smoothstep(2800.0, 4300.0, TeqNear);
+                float recombEqKinkFar = 1.0 - smoothstep(2800.0, 4300.0, TeqFar);
+                phaseRedNear = clamp(phaseRedNear + 0.20 * recombEqKinkNear * (0.35 + 0.65 * lanthEqNear), 0.0, 1.0);
+                phaseRedFar = clamp(phaseRedFar + 0.20 * recombEqKinkFar * (0.35 + 0.65 * lanthEqFar), 0.0, 1.0);
+                phaseBlueNear = clamp(phaseBlueNear * (1.0 - 0.14 * recombEqKinkNear * lanthEqNear), 0.0, 1.0);
+                phaseBlueFar = clamp(phaseBlueFar * (1.0 - 0.14 * recombEqKinkFar * lanthEqFar), 0.0, 1.0);
+
+                float LpolarNear = massPolar * pow(tDays, -1.3) * thermalizationEff(tDays, 0.9);
+                float LeqNear = massEq * pow(tDays, -1.3) * thermalizationEff(tDays, 1.8);
+                float LcocoonNear = massCocoon * pow(tDays, -1.3) * thermalizationEff(tDays, 1.2);
+                float LpolarFar = massPolar * pow(tDaysFar, -1.3) * thermalizationEff(tDaysFar, 0.9);
+                float LeqFar = massEq * pow(tDaysFar, -1.3) * thermalizationEff(tDaysFar, 1.8);
+                float LcocoonFar = massCocoon * pow(tDaysFar, -1.3) * thermalizationEff(tDaysFar, 1.2);
+                float LsumNear = max(1e-5, LpolarNear + LeqNear + LcocoonNear);
+                float LsumFar = max(1e-5, LpolarFar + LeqFar + LcocoonFar);
+                float eqBlanketViewNear = 1.0 + 0.46 * viewEqSight * lanthEqNear;
+                float eqBlanketViewFar = 1.0 + 0.46 * viewEqSight * lanthEqFar;
+                float wBlueNear = clamp((LpolarNear / LsumNear) * exp(-(0.12 + 0.20 * lanthPolarNear) * tauPolarNear * eqBlanketViewNear), 0.0, 1.0);
+                float wRedNear = clamp((LeqNear / LsumNear) * (1.0 - exp(-(0.06 + 0.18 * lanthEqNear) * tauEqNear * (0.90 + 0.25 * viewEqSight))) + 0.10 * (LcocoonNear / LsumNear) * (0.55 + 0.45 * lanthCocoonNear), 0.0, 1.0);
+                float wPurpleNear = clamp(0.42 * (LcocoonNear / LsumNear) * exp(-(0.05 + 0.12 * lanthCocoonNear) * tauCocoonNear) + 0.16 * sqrt(max(wBlueNear * wRedNear, 0.0)), 0.0, 1.0);
+                float wNormNear = max(wBlueNear + wPurpleNear + wRedNear, 1e-4);
+                wBlueNear /= wNormNear;
+                wPurpleNear /= wNormNear;
+                wRedNear /= wNormNear;
+                float wBlueFar = clamp((LpolarFar / LsumFar) * exp(-(0.12 + 0.20 * lanthPolarFar) * tauPolarFar * eqBlanketViewFar), 0.0, 1.0);
+                float wRedFar = clamp((LeqFar / LsumFar) * (1.0 - exp(-(0.06 + 0.18 * lanthEqFar) * tauEqFar * (0.90 + 0.25 * viewEqSight))) + 0.10 * (LcocoonFar / LsumFar) * (0.55 + 0.45 * lanthCocoonFar), 0.0, 1.0);
+                float wPurpleFar = clamp(0.42 * (LcocoonFar / LsumFar) * exp(-(0.05 + 0.12 * lanthCocoonFar) * tauCocoonFar) + 0.16 * sqrt(max(wBlueFar * wRedFar, 0.0)), 0.0, 1.0);
+                float wNormFar = max(wBlueFar + wPurpleFar + wRedFar, 1e-4);
+                wBlueFar /= wNormFar;
+                wPurpleFar /= wNormFar;
+                wRedFar /= wNormFar;
+                phaseBlueNear = mix(phaseBlueNear, wBlueNear, 0.86);
+                phasePurpleNear = mix(phasePurpleNear, wPurpleNear, 0.48);
+                phaseRedNear = mix(phaseRedNear, wRedNear, 0.90);
+                phaseBlueFar = mix(phaseBlueFar, wBlueFar, 0.86);
+                phasePurpleFar = mix(phasePurpleFar, wPurpleFar, 0.48);
+                phaseRedFar = mix(phaseRedFar, wRedFar, 0.90);
+                float pSumNear = max(phaseBlueNear + phasePurpleNear + phaseRedNear, 1e-4);
+                phaseBlueNear /= pSumNear;
+                phasePurpleNear /= pSumNear;
+                phaseRedNear /= pSumNear;
+                float pSumFar = max(phaseBlueFar + phasePurpleFar + phaseRedFar, 1e-4);
+                phaseBlueFar /= pSumFar;
+                phasePurpleFar /= pSumFar;
+                phaseRedFar /= pSumFar;
+                phaseCloudEarlyNear *= 0.72 + 0.24 * phaseBlueNear + 0.04 * phasePurpleNear;
+                phaseCloudEarlyFar *= 0.72 + 0.24 * phaseBlueFar + 0.04 * phasePurpleFar;
+                phaseNebulaNear *= 0.74 + 0.26 * phaseRedNear;
+                phaseNebulaFar *= 0.74 + 0.26 * phaseRedFar;
+                float heatNormNear = clamp(0.08 + 1.45 * pow(LsumNear, 0.72), 0.06, 1.22);
+                float heatNormFar = clamp(0.08 + 1.45 * pow(LsumFar, 0.72), 0.06, 1.22);
+                float TlumNear = (massPolar * TpolarNear + massEq * TeqNear + massCocoon * TcocoonNear) / max(uEjectaMass, 1e-4);
+                float TlumFar = (massPolar * TpolarFar + massEq * TeqFar + massCocoon * TcocoonFar) / max(uEjectaMass, 1e-4);
+                float thermNear = clamp(pow(max(TlumNear, 1600.0) / 12500.0, 0.58), 0.16, 1.0);
+                float thermFar = clamp(pow(max(TlumFar, 1600.0) / 12500.0, 0.58), 0.16, 1.0);
+
+                float recedeNear = smoothstep(0.44 * tDiffMixNear, 4.0 * tDiffMixNear, tDays) * (0.45 + 0.55 * mNorm);
+                float recedeFar = smoothstep(0.44 * tDiffMixFar, 4.0 * tDiffMixFar, tDaysFar) * (0.45 + 0.55 * mNorm);
+                float RphPolNear = max(0.35, uPolarVel * tDays * 12.0 * mix(1.10, 0.78, recedeNear));
+                float RphEqNear = max(0.35, uEqVel * tDays * 12.0 * mix(1.06, 0.66, recedeNear));
+                float RphPolFar = max(0.35, uPolarVel * tDaysFar * 12.0 * mix(1.10, 0.78, recedeFar));
+                float RphEqFar = max(0.35, uEqVel * tDaysFar * 12.0 * mix(1.06, 0.66, recedeFar));
+                float RphNear = mix(Rp * 0.98, mix(RphPolNear, RphEqNear, 0.60) + 0.62, recedeNear);
+                float RphFar = mix(Rp * 0.98, mix(RphPolFar, RphEqFar, 0.60) + 0.62, recedeFar);
+                float WphNear = mix(0.66, 0.30 + 0.10 * smoothstep(0.0, 1.0, recedeNear), recedeNear);
+                float WphFar = mix(0.66, 0.30 + 0.10 * smoothstep(0.0, 1.0, recedeFar), recedeFar);
+
+                vec3 colorJet = vec3(0.67, 0.84, 1.35);
+                vec3 colorJetHot = vec3(1.02, 1.28, 1.86);
+
+                float recombPolarNear = 1.0 - smoothstep(2500.0, 4300.0, TpolarNear);
+                float recombEqNear = 1.0 - smoothstep(2500.0, 4300.0, TeqNear);
+                float recombCocoonNear = 1.0 - smoothstep(2500.0, 4300.0, TcocoonNear);
+                float recombPhotoNear = 1.0 - smoothstep(2600.0, 4600.0, TphotoNear);
+                vec3 bbPolarNear = pseudoSpectralColor(TpolarNear, tauPolarNear, yEPolarNear, recombPolarNear);
+                vec3 bbEqNear = pseudoSpectralColor(TeqNear, tauEqNear, yEEqNear, recombEqNear);
+                vec3 bbCocoonNear = pseudoSpectralColor(TcocoonNear, tauCocoonNear, yECocoonNear, recombCocoonNear);
+                vec3 tintPolarNear = lineEmissionTint(tDays, yEPolarNear, tauPolarNear, TpolarNear);
+                vec3 tintEqNear = lineEmissionTint(tDays, yEEqNear, tauEqNear, TeqNear);
+                vec3 tintCocoonNear = lineEmissionTint(tDays, yECocoonNear, tauCocoonNear, TcocoonNear);
+                vec3 eqWarmNear = mix(vec3(0.98, 0.62, 0.41), vec3(0.92, 0.56, 0.33), phaseRedNear);
+                vec3 colPolarNear = mix(bbPolarNear, vec3(0.70, 0.92, 1.34), 0.18 * phaseBlueNear);
+                vec3 colEqNear = mix(bbEqNear, eqWarmNear, 0.20 + 0.50 * phaseRedNear + 0.14 * lanthEqNear);
+                colEqNear = mix(colEqNear, vec3(0.94, 0.72, 0.88), 0.08 * phasePurpleNear * (1.0 - phaseRedNear));
+                vec3 colRSNear = mix(kelvinToRGB(9000.0 + 2600.0 * phaseBlueNear), vec3(1.0, 0.78, 0.90), 0.16 + 0.12 * phasePurpleNear);
+                vec3 colRTNear = mix(vec3(0.88, 0.72, 0.98), vec3(1.00, 0.56, 0.31), smoothstep(0.45, 1.0, evo));
+                vec3 colCocoonNear = mix(bbCocoonNear, vec3(0.84, 0.72, 1.02), 0.14 + 0.16 * phasePurpleNear);
+                vec3 colInnerCloudNear = mix(pseudoSpectralColor(TcloudEarlyNear, 0.55 * tauCocoonNear + 0.45 * tauPolarNear, mix(yECocoonNear, yEPolarNear, 0.40), mix(recombCocoonNear, recombPolarNear, 0.45)), vec3(0.76, 0.96, 1.34), 0.32 * phaseBlueNear + 0.10 * phasePurpleNear);
+                vec3 colNestedShellNear = mix(pseudoSpectralColor(TcloudLateNear, 0.65 * tauEqNear + 0.35 * tauCocoonNear, mix(yEEqNear, yECocoonNear, 0.58), mix(recombEqNear, recombCocoonNear, 0.60)), vec3(0.97, 0.58, 0.38), 0.52 * phaseRedNear);
+                vec3 colNebulaCloudNear = mix(mix(colInnerCloudNear, colCocoonNear, 0.42), mix(colNestedShellNear, vec3(0.74, 0.92, 1.26), 0.50), 0.44 + 0.08 * phasePurpleNear);
+                vec3 colPhotoNear = mix(pseudoSpectralColor(TphotoNear, mix(tauPolarNear, tauEqNear, 0.58), mix(yEPolarNear, yEEqNear, 0.58), recombPhotoNear), colPolarNear, 0.24);
+                vec3 colAfterglowNear = mix(kelvinToRGB(TagNear), vec3(0.62, 0.86, 1.30), 0.54);
+                colPolarNear = applyTintLumConserve(colPolarNear, tintPolarNear, 0.46);
+                colEqNear = applyTintLumConserve(colEqNear, tintEqNear, 0.58);
+                colCocoonNear = applyTintLumConserve(colCocoonNear, tintCocoonNear, 0.50);
+                colInnerCloudNear = applyTintLumConserve(colInnerCloudNear, mix(tintPolarNear, tintCocoonNear, 0.60), 0.42);
+                colNestedShellNear = applyTintLumConserve(colNestedShellNear, mix(tintEqNear, tintCocoonNear, 0.55), 0.50);
+                colNebulaCloudNear = applyTintLumConserve(colNebulaCloudNear, mix(tintEqNear, tintCocoonNear, 0.72), 0.56);
+                colPhotoNear = applyTintLumConserve(colPhotoNear, mix(tintPolarNear, tintEqNear, 0.58), 0.30);
+                colAfterglowNear = applyTintLumConserve(colAfterglowNear, mix(tintPolarNear, tintCocoonNear, 0.55), 0.26);
+
+                float recombPolarFar = 1.0 - smoothstep(2500.0, 4300.0, TpolarFar);
+                float recombEqFar = 1.0 - smoothstep(2500.0, 4300.0, TeqFar);
+                float recombCocoonFar = 1.0 - smoothstep(2500.0, 4300.0, TcocoonFar);
+                float recombPhotoFar = 1.0 - smoothstep(2600.0, 4600.0, TphotoFar);
+                vec3 bbPolarFar = pseudoSpectralColor(TpolarFar, tauPolarFar, yEPolarFar, recombPolarFar);
+                vec3 bbEqFar = pseudoSpectralColor(TeqFar, tauEqFar, yEEqFar, recombEqFar);
+                vec3 bbCocoonFar = pseudoSpectralColor(TcocoonFar, tauCocoonFar, yECocoonFar, recombCocoonFar);
+                vec3 tintPolarFar = lineEmissionTint(tDaysFar, yEPolarFar, tauPolarFar, TpolarFar);
+                vec3 tintEqFar = lineEmissionTint(tDaysFar, yEEqFar, tauEqFar, TeqFar);
+                vec3 tintCocoonFar = lineEmissionTint(tDaysFar, yECocoonFar, tauCocoonFar, TcocoonFar);
+                vec3 eqWarmFar = mix(vec3(0.98, 0.62, 0.41), vec3(0.92, 0.56, 0.33), phaseRedFar);
+                vec3 colPolarFar = mix(bbPolarFar, vec3(0.70, 0.92, 1.34), 0.18 * phaseBlueFar);
+                vec3 colEqFar = mix(bbEqFar, eqWarmFar, 0.20 + 0.50 * phaseRedFar + 0.14 * lanthEqFar);
+                colEqFar = mix(colEqFar, vec3(0.94, 0.72, 0.88), 0.08 * phasePurpleFar * (1.0 - phaseRedFar));
+                vec3 colRSFar = mix(kelvinToRGB(9000.0 + 2600.0 * phaseBlueFar), vec3(1.0, 0.78, 0.90), 0.16 + 0.12 * phasePurpleFar);
+                vec3 colRTFar = colRTNear;
+                vec3 colCocoonFar = mix(bbCocoonFar, vec3(0.84, 0.72, 1.02), 0.14 + 0.16 * phasePurpleFar);
+                vec3 colInnerCloudFar = mix(pseudoSpectralColor(TcloudEarlyFar, 0.55 * tauCocoonFar + 0.45 * tauPolarFar, mix(yECocoonFar, yEPolarFar, 0.40), mix(recombCocoonFar, recombPolarFar, 0.45)), vec3(0.76, 0.96, 1.34), 0.32 * phaseBlueFar + 0.10 * phasePurpleFar);
+                vec3 colNestedShellFar = mix(pseudoSpectralColor(TcloudLateFar, 0.65 * tauEqFar + 0.35 * tauCocoonFar, mix(yEEqFar, yECocoonFar, 0.58), mix(recombEqFar, recombCocoonFar, 0.60)), vec3(0.97, 0.58, 0.38), 0.52 * phaseRedFar);
+                vec3 colNebulaCloudFar = mix(mix(colInnerCloudFar, colCocoonFar, 0.42), mix(colNestedShellFar, vec3(0.74, 0.92, 1.26), 0.50), 0.44 + 0.08 * phasePurpleFar);
+                vec3 colPhotoFar = mix(pseudoSpectralColor(TphotoFar, mix(tauPolarFar, tauEqFar, 0.58), mix(yEPolarFar, yEEqFar, 0.58), recombPhotoFar), colPolarFar, 0.24);
+                vec3 colAfterglowFar = mix(kelvinToRGB(TagFar), vec3(0.62, 0.86, 1.30), 0.54);
+                colPolarFar = applyTintLumConserve(colPolarFar, tintPolarFar, 0.46);
+                colEqFar = applyTintLumConserve(colEqFar, tintEqFar, 0.58);
+                colCocoonFar = applyTintLumConserve(colCocoonFar, tintCocoonFar, 0.50);
+                colInnerCloudFar = applyTintLumConserve(colInnerCloudFar, mix(tintPolarFar, tintCocoonFar, 0.60), 0.42);
+                colNestedShellFar = applyTintLumConserve(colNestedShellFar, mix(tintEqFar, tintCocoonFar, 0.55), 0.50);
+                colNebulaCloudFar = applyTintLumConserve(colNebulaCloudFar, mix(tintEqFar, tintCocoonFar, 0.72), 0.56);
+                colPhotoFar = applyTintLumConserve(colPhotoFar, mix(tintPolarFar, tintEqFar, 0.58), 0.30);
+                colAfterglowFar = applyTintLumConserve(colAfterglowFar, mix(tintPolarFar, tintCocoonFar, 0.55), 0.26);
+
+                vec3 transRGB = vec3(1.0);
+                vec3 los = -rd;
+                float viewEquatorial = pow(max(0.0, 1.0 - abs(los.z)), 1.10);
+                float t = tNear + jitter;
+
+                for (int i = 0; i < MAX_STEPS; i++) {
+                  if (float(i) >= localSteps || t > tFar) {
+                    break;
+                  }
+
+                  vec3 p = ro + rd * t;
+                  float r = length(p);
+                  vec3 n = p / max(r, 1e-5);
+                  float ltMix = clamp((t - tNear) / totalDist, 0.0, 1.0);
+                  float act2Local = clamp(uAct2Progress - ltMix * 0.18, 0.0, 1.0);
+                  float evoLocal = clamp(evo - ltMix * (0.06 + 0.08 * evo), 0.0, 1.0);
+                  float tDaysBase = mix(tDays, tDaysFar, ltMix);
+                  float arrivalAniso = 0.5 - 0.5 * dot(n, los);
+                  float arrivalRadial = smoothstep(0.10 * boundRadius, 0.96 * boundRadius, r);
+                  float arrivalDelay = maxLtDelay * arrivalAniso * arrivalRadial * 0.52;
+                  float tDaysLocal = max(0.03, tDaysBase - arrivalDelay);
+                  float heatNormLocal = mix(heatNormNear, heatNormFar, ltMix);
+                  float thermLocal = mix(thermNear, thermFar, ltMix);
+                  float phaseBlueLocal = mix(phaseBlueNear, phaseBlueFar, ltMix);
+                  float phasePurpleLocal = mix(phasePurpleNear, phasePurpleFar, ltMix);
+                  float phaseRedLocal = mix(phaseRedNear, phaseRedFar, ltMix);
+                  float phaseRetard = clamp((tDaysBase - tDaysLocal) / max(tDaysBase, 0.08), 0.0, 0.80);
+                  phaseBlueLocal = clamp(phaseBlueLocal + 0.42 * phaseRetard * (1.0 - phaseBlueLocal), 0.0, 1.0);
+                  phasePurpleLocal = clamp(phasePurpleLocal + 0.05 * phaseRetard * (1.0 - phasePurpleLocal), 0.0, 1.0);
+                  phaseRedLocal = clamp(phaseRedLocal * (1.0 - 0.34 * phaseRetard), 0.0, 1.0);
+                  float pLocalNorm = max(phaseBlueLocal + phasePurpleLocal + phaseRedLocal, 1e-4);
+                  phaseBlueLocal /= pLocalNorm;
+                  phasePurpleLocal /= pLocalNorm;
+                  phaseRedLocal /= pLocalNorm;
+                  float evoLocalRet = clamp(evoLocal - 0.18 * phaseRetard, 0.0, 1.0);
+                  float phaseCloudEarlyLocal = mix(phaseCloudEarlyNear, phaseCloudEarlyFar, ltMix);
+                  float phaseNebulaLocal = mix(phaseNebulaNear, phaseNebulaFar, ltMix);
+
+                  vec3 colPolarLocal = mix(colPolarNear, colPolarFar, ltMix);
+                  vec3 colEqLocal = mix(colEqNear, colEqFar, ltMix);
+                  vec3 colRSLocal = mix(colRSNear, colRSFar, ltMix);
+                  vec3 colRTLocal = mix(colRTNear, colRTFar, ltMix);
+                  vec3 colCocoonLocal = mix(colCocoonNear, colCocoonFar, ltMix);
+                  vec3 colInnerLocal = mix(colInnerCloudNear, colInnerCloudFar, ltMix);
+                  vec3 colNestedLocal = mix(colNestedShellNear, colNestedShellFar, ltMix);
+                  vec3 colNebulaLocal = mix(colNebulaCloudNear, colNebulaCloudFar, ltMix);
+                  vec3 colPhotoLocal = mix(colPhotoNear, colPhotoFar, ltMix);
+                  vec3 colAfterglowLocal = mix(colAfterglowNear, colAfterglowFar, ltMix);
+                  float RphLocal = mix(RphNear, RphFar, ltMix);
+                  float WphLocal = mix(WphNear, WphFar, ltMix);
+                  float evoSh = clamp(evoLocalRet, 0.0, 1.0);
+                  float sedovBlend = smoothstep(0.18, 0.95, evoSh);
+                  float shockProgFree = pow(max(evoSh, 1e-4), 0.92);
+                  float shockProgSedov = pow(max(evoSh, 1e-4), 0.62);
+                  float shockProg = mix(shockProgFree, shockProgSedov, sedovBlend);
+                  float shockOn = smoothstep(0.015, 0.20, evoSh);
+                  float Rfs = mix(1.20, fsScale * shockProg + 0.95, shockOn);
+                  float Rcd = mix(1.02, cdScale * shockProg + 0.74, shockOn);
+                  float Rrs = mix(0.82, rsScale * shockProg + 0.54, shockOn);
+                  float shockWidthGrow = smoothstep(0.06, 1.0, evoSh);
+                  float fsThickness = mix(0.09, 0.30 + 0.28 * shockWidthGrow, sedovBlend);
+                  float cdThickness = mix(0.11, 0.36 + 0.34 * shockWidthGrow, sedovBlend);
+                  float rsThickness = mix(0.10, 0.32 + 0.30 * shockWidthGrow, sedovBlend);
+                  float shockCorrAmp = (0.015 + 0.060 * shockWidthGrow) * (0.85 + 0.25 * uRTStrength) * (0.92 + 0.08 * collisionCore);
+
+                  float pole = pow(abs(n.z), 3.7);
+                  float equa = pow(max(0.0, 1.0 - abs(n.z)), 2.05);
+
+                  float rhoP = exp(-pow((r - Rp) / thickP, 2.0)) * pole;
+                  float rhoE = exp(-pow((r - Re) / thickE, 2.0)) * equa;
+
+                  float phiN = atan(n.y, n.x);
+                  float corrSeed = noise3(n * (6.0 + 3.0 * evoSh) + vec3(0.0, 0.0, uTime * 0.12));
+                  float corrWave = 0.5 + 0.5 * sin((phiN + n.z * 2.1) * (7.0 + 3.0 * evoSh) + uTime * (0.85 + 0.45 * evoSh) + corrSeed * 6.2);
+                  float shockCorr = (corrWave - 0.5) * 2.0 * shockCorrAmp;
+                  float RfsLocal = Rfs * (1.0 + shockCorr);
+                  float RcdLocal = Rcd * (1.0 + 0.75 * shockCorr);
+                  float RrsLocal = Rrs * (1.0 + 0.55 * shockCorr);
+
+                  float rhoForward = exp(-pow((r - RfsLocal) / max(fsThickness, 1e-3), 2.0)) * mix(pow(abs(n.z), 1.05), 1.0, 0.48);
+                  float rhoContact = exp(-pow((r - RcdLocal) / max(cdThickness, 1e-3), 2.0)) * mix(0.82 * equa + 0.35 * pole, 0.55 + 0.45 * equa, 0.45);
+                  float rhoRS = exp(-pow((r - RrsLocal) / max(rsThickness, 1e-3), 2.0)) * mix(0.78 * equa, 0.55 * pole, 0.32);
+
+                  float rhoRT = 0.0;
+                  float rhoJet = 0.0;
+                  float rhoCocoon = 0.0;
+                  float rhoTorus = 0.0;
+                  float rhoInnerCloud = 0.0;
+                  float rhoNestedShell = 0.0;
+                  float rhoShockCloud = 0.0;
+                  float rhoNebula = 0.0;
+                  float rhoAfterglow = 0.0;
+                  float nestedPhase = smoothstep(0.06, 1.0, evoSh);
+                  float innerR = mix(0.95, Re * 0.60 + 1.0, nestedPhase);
+                  float innerW = 0.30 + 0.46 * nestedPhase;
+                  float rhoInnerBase = exp(-pow((r - innerR) / innerW, 2.0)) * (0.35 + 0.65 * (1.0 - smoothstep(0.78, 1.0, evoSh)));
+                  float shockCloudR = mix(0.68, Re * 0.86 + 0.55, smoothstep(0.02, 0.55, evoSh));
+                  float shockCloudW = 0.34 + 0.58 * smoothstep(0.02, 0.70, evoSh);
+                  float antiJet = pow(max(0.0, 1.0 - abs(n.z)), 1.05);
+                  float rhoShockCloudBase = exp(-pow((r - shockCloudR) / shockCloudW, 2.0)) * antiJet * phaseCloudEarlyLocal;
+                  float nestedR = Rp * (1.20 + 0.42 * nestedPhase);
+                  float nestedW = 0.30 + 0.45 * nestedPhase;
+                  float rhoNestedBase = exp(-pow((r - nestedR) / nestedW, 2.0)) * smoothstep(0.26, 1.0, evoSh);
+                  float rhoNestedLat = exp(-pow((abs(n.z) - 0.72) / (0.16 + 0.08 * nestedPhase), 2.0));
+                  float rhoNestedBroad = rhoNestedBase * (0.22 + 0.78 * rhoNestedLat);
+                  float nebulaPhaseLocal = smoothstep(0.10, 1.0, evoSh);
+                  float nebulaR = mix(Re * 0.58 + 0.45, Re * (0.95 + 0.20 * nebulaPhaseLocal), nebulaPhaseLocal);
+                  float nebulaW = 0.55 + 0.95 * nebulaPhaseLocal;
+                  float rhoNebulaBase = exp(-pow((r - nebulaR) / nebulaW, 2.0)) * (0.12 + 0.88 * phaseNebulaLocal);
+
+                  // Explicit equatorial tidal torus (lanthanide-rich red component).
+                  float torusRise = smoothstep(0.10, 0.95, evoSh);
+                  float torusMajor = mix(Re * 0.66 + 0.35, Re * (0.98 + 0.32 * torusRise) + 0.75, torusRise);
+                  float torusMinor = 0.18 + 0.34 * torusRise + 0.06 * uOpacityContrast;
+                  float torusRad = length(p.xy);
+                  float torusRing = exp(-pow((torusRad - torusMajor) / max(torusMinor, 1e-4), 2.0));
+                  float torusVert = exp(-pow(p.z / max(torusMinor * (0.60 + 0.10 * (1.0 - phaseBlueLocal)), 1e-4), 2.0));
+                  float torusAz = 0.78 + 0.22 * sin(phiN * (8.0 + 3.0 * torusRise) + uTime * 0.52 + corrSeed * 4.2);
+                  rhoTorus = torusRing * torusVert * torusAz * torusRise * (0.36 + 0.86 * phaseRedLocal) * (0.84 + 0.40 * uOpacityContrast);
+
+                  float coarseShell = rhoP + rhoE + rhoRS + 0.62 * rhoForward + 0.52 * rhoContact + 0.72 * rhoTorus + 0.35 * rhoInnerBase + 0.70 * rhoShockCloudBase + 0.55 * rhoNestedBroad + 0.65 * rhoNebulaBase;
+                  float stepMul = 1.0;
+                  if (coarseShell < 0.0018) {
+                    stepMul = 1.58;
+                  }
+
+                  vec3 pAdv = p;
+                  if (coarseShell > 0.0022 || abs(n.z) > 0.55) {
+                    float axisRFlow = length(p.xy);
+                    vec3 swirlDir = axisRFlow > 1e-4 ? vec3(-p.y, p.x, 0.0) / axisRFlow : vec3(0.0);
+                    float flowNoiseA = noise3(vec3(p.x * 0.23 + uTime * 0.11, p.z * 0.17, p.y * 0.21));
+                    float flowNoiseB = noise3(vec3(p.y * 0.25 - uTime * 0.09, p.x * 0.19, p.z * 0.24));
+                    float flowStrength = (0.06 + 0.18 * evoSh) * (0.65 + 0.35 * smoothstep(0.0, 1.0, r / max(Rp, 1e-3)));
+                    vec3 plumeDrift = vec3(flowNoiseA - 0.5, flowNoiseB - 0.5, (flowNoiseA + flowNoiseB) - 1.0);
+                    pAdv = p + (0.24 * swirlDir + 0.78 * plumeDrift) * flowStrength;
+                  }
+
+                  if (coarseShell > 0.004 || abs(n.z) > 0.62) {
+                    float rtLayer = exp(-pow((r - mix(Re, Rp, 0.52)) / (thickE * 1.1 + 0.08), 2.0));
+                    float rtGrowth = pow(evoSh, 1.55) * uRTStrength;
+                    vec3 warpP = pAdv * 0.85 + vec3(0.0, 0.0, uTime * 0.23);
+                    float warp = fbm(warpP * 0.95, localOctaves);
+                    float fingers = smoothstep(0.50, 0.89, fbm(warpP * 2.15 + warp * 2.3 * n, localOctaves));
+                    float phi = atan(n.y, n.x);
+                    float branch = 0.5 + 0.5 * sin(phi * 13.0 + uTime * 0.74 + warp * 5.3);
+                    rhoRT = rtLayer * fingers * (0.35 + 1.75 * branch) * rtGrowth;
+
+                    float angle = radians(max(3.0, uJetAngle));
+                    float axisR = length(p.xy);
+                    float az = abs(p.z);
+                    float jetLengthRaw = mix(4.2 + 4.6 * uEnergyScale, Rp * (3.10 + 0.38 * collisionCore), smoothstep(0.0, 0.40, evoSh));
+                    float jetLength = min(jetLengthRaw, boundRadius * 0.88);
+                    float beamT = clamp(az / max(jetLength, 1e-3), 0.0, 1.0);
+                    float theta = atan(axisR, max(az, 1e-4));
+                    float thetaCore = max(angle * 0.70, radians(2.0));
+                    float gaussCore = exp(-0.5 * pow(theta / thetaCore, 2.0));
+                    float wing = pow(1.0 + pow(theta / (thetaCore * 1.45), 2.0), -1.15);
+                    float structuredJet = clamp(gaussCore + 0.34 * wing, 0.0, 1.55);
+                    float collimation = mix(0.16, 0.52, smoothstep(0.0, 0.75, beamT));
+                    float coreWidth = 0.065 + az * tan(angle * collimation);
+                    float sheathWidth = coreWidth * (2.2 + 0.7 * (1.0 - beamT));
+
+                    float spine = exp(-pow(axisR / max(coreWidth, 1e-4), 2.0));
+                    float sheath = max(exp(-pow(axisR / max(sheathWidth, 1e-4), 2.0)) - spine, 0.0);
+                    float along = smoothstep(0.12, 1.0, az) * (1.0 - smoothstep(jetLength, jetLength + (1.4 + 0.8 * evoSh), az));
+                    float jetNoise = 0.58 + 0.42 * fbm(vec3(axisR * 3.1, az * 1.4 + uTime * 0.9, uTime * 0.65), localOctaves);
+
+                    // Turbulent filamentation and internal shocks: advected stochastic packets
+                    // rather than stationary periodic standing waves.
+                    float jetAdv = az * (1.70 + 0.20 * beamT) - uTime * (2.35 + 0.45 * collisionCore);
+                    float filFieldA = fbm(vec3(axisR * 2.9 + phi * 0.8, jetAdv * 0.42, uTime * 0.18), max(2.0, localOctaves - 1.0));
+                    float filFieldB = noise3(vec3(axisR * 5.2 - phi * 0.6, jetAdv * 0.90 + corrSeed * 1.4, uTime * 0.31));
+                    float filament = 0.74 + 0.26 * smoothstep(0.44, 0.92, 0.62 * filFieldA + 0.38 * filFieldB);
+
+                    float shockAdv = az * (0.92 + 0.24 * beamT) - uTime * (2.85 + 0.58 * collisionCore);
+                    float shockFieldA = fbm(vec3(phi * 1.7 + corrSeed * 2.2, shockAdv * 0.96, uTime * 0.15), max(2.0, localOctaves - 1.0));
+                    float shockFieldB = noise3(vec3(phi * 3.2 - corrSeed * 3.1, shockAdv * 1.75 + shockFieldA * 1.9, uTime * 0.21));
+                    float shockWindow = smoothstep(0.08, 0.76, beamT) * (1.0 - smoothstep(0.90, 1.0, beamT));
+                    float shockFieldMix = 0.50 * shockFieldA + 0.34 * shockFieldB + 0.16 * filFieldA;
+                    float shockPackets = smoothstep(0.66, 0.94, shockFieldMix);
+                    float packetContrast = mix(0.14, 0.34, shockWindow) * (0.85 + 0.15 * smoothstep(0.0, 0.90, evoSh));
+                    float shockJitter = 0.94 + 0.12 * noise3(vec3(phi * 1.1 + corrSeed * 0.7, shockAdv * 0.55, uTime * 0.09));
+                    float shockTrainRaw = clamp((1.0 + packetContrast * shockPackets) * shockJitter, 0.90, 1.34);
+                    float shockTrain = mix(1.0, shockTrainRaw, shockWindow);
+                    float jetBeam = (spine * (1.0 + 0.22 * filament) + sheath * 0.55) * along * jetNoise * shockTrain;
+
+                    float headR = 0.85 + 1.10 * smoothstep(0.0, 1.0, evoSh);
+                    float headNoise = 0.82 + 0.18 * fbm(vec3(axisR * 2.2, az * 0.9 + uTime * 0.28, 1.7), localOctaves);
+                    float head = exp(-pow((az - jetLength) / (0.34 + 0.48 * evoSh), 2.0)) * exp(-pow(axisR / headR, 2.0)) * headNoise;
+                    float hotspot = exp(-pow((az - jetLength) / (0.18 + 0.20 * evoSh), 2.0)) * exp(-pow(axisR / (0.36 + 0.28 * evoSh), 2.0)) * headNoise;
+                    float headFlow = fbm(vec3(axisR * 1.45 + phi * 0.25, az * 0.62 - uTime * 0.10, uTime * 0.14), max(2.0, localOctaves - 1.0));
+                    float headFil = 0.78 + 0.22 * smoothstep(0.32, 0.88, headFlow);
+                    float headWindow = smoothstep(0.0, 0.30, beamT) * (1.0 - smoothstep(0.92, 1.0, beamT));
+                    float headSoft = mix(1.0, headFil, headWindow);
+                    head *= headSoft;
+                    hotspot *= mix(1.0, headSoft, 0.72);
+
+                    float cocoonRadius = az * tan(angle * 1.45) + 0.22;
+                    float cocoonShell = exp(-pow((axisR - cocoonRadius) / (0.20 + 0.30 * evoSh), 2.0)) * smoothstep(0.35, jetLength * 1.3, az);
+                    float cocoonFill = exp(-pow(axisR / (cocoonRadius * (1.25 + 0.30 * collisionCore) + 0.35), 2.0)) * smoothstep(0.4, jetLength * 1.25, az);
+                    float cocoonAxisR = length(pAdv.xy);
+                    float cocoonAz = abs(pAdv.z);
+                    float cocoonWarp = fbm(vec3(cocoonAxisR * 1.8, cocoonAz * 0.9 + uTime * 0.21, uTime * 0.35 + pAdv.x * 0.22), localOctaves);
+                    float cocoonTurb = 0.70 + 0.30 * sin(cocoonWarp * 8.0 + az * 2.4 - uTime * 0.5);
+                    float breakoutRadius = headR * (1.35 + 0.70 * smoothstep(0.0, 1.0, evoSh));
+                    float cocoonBreakout = exp(-pow((az - (jetLength + 0.4)) / (0.40 + 0.55 * evoSh), 2.0)) * exp(-pow((axisR - breakoutRadius) / (0.34 + 0.40 * evoSh), 2.0));
+
+                    float azNorm = az / max(jetLength, 1e-3);
+                    float jetDecay = exp(-pow(max(0.0, azNorm - 1.0) / (1.22 + 0.95 * evoSh), 1.34));
+                    float cocoonDecay = exp(-pow(max(0.0, azNorm - 0.92) / (1.45 + 1.10 * evoSh), 1.22));
+                    float tailBoundaryFade = 1.0 - smoothstep(boundRadius * 0.86, boundRadius * 1.05, az);
+                    float jetCut = jetDecay * tailBoundaryFade;
+                    float cocoonCut = cocoonDecay * tailBoundaryFade;
+                    rhoJet = (jetBeam + 1.70 * head + 2.10 * hotspot) * jetStrength * jetCut * structuredJet;
+                    rhoCocoon = (1.10 * cocoonShell + 0.70 * cocoonFill + 1.10 * head + 0.95 * cocoonBreakout) * cocoonTurb * (0.90 + 0.82 * collisionCore) * clamp(jetStrength, 0.0, 3.2) * cocoonCut;
+                  }
+
+                  float rhoAmbient = exp(-pow((r - Rp * 1.16) / (thickP * 0.9 + 0.18), 2.0)) * 0.22;
+                  float localOctFast = max(2.0, localOctaves - 1.0);
+                  if (rhoInnerBase > 0.010 || rhoShockCloudBase > 0.008 || rhoNestedBroad > 0.010 || rhoNebulaBase > 0.008) {
+                    float clumpNoise = fbm(pAdv * 2.55 + vec3(0.0, 0.0, uTime * 0.20), localOctFast);
+                    float clumpCells = 0.5 + 0.5 * sin((pAdv.x + pAdv.y + pAdv.z) * 4.5 + uTime * 2.1 + clumpNoise * 8.0);
+                    float clumpMask = smoothstep(0.45, 0.88, clumpNoise) * (0.45 + 0.55 * clumpCells);
+                    rhoInnerCloud = rhoInnerBase * (0.28 + 1.55 * clumpMask);
+                    rhoShockCloud = rhoShockCloudBase * (0.25 + 1.90 * clumpMask);
+
+                    float axisRSoft = length(pAdv.xy);
+                    float shellWarp = 0.72 + 0.28 * fbm(vec3(axisRSoft * 1.35, abs(pAdv.z) * 0.85 + uTime * 0.12, uTime * 0.16), localOctFast);
+                    rhoNestedShell = rhoNestedBroad * shellWarp;
+
+                    float nebNoise = fbm(pAdv * 2.90 + vec3(uTime * 0.14, -uTime * 0.11, uTime * 0.09), localOctFast);
+                    float nebCells = noise3(pAdv * 7.20 + vec3(uTime * 0.21));
+                    float nebMask = smoothstep(0.46, 0.90, nebNoise + 0.55 * nebCells);
+                    float puffBand = 0.58 + 0.42 * sin((r - nebulaR) * 18.0 + nebNoise * 10.0 - uTime * 1.1);
+                    rhoNebula = rhoNebulaBase * (0.20 + 2.20 * nebMask * puffBand);
+                  }
+
+                  float fsWidthLocal = fsThickness * (0.82 + 0.35 * sedovBlend);
+                  float cdWidthLocal = cdThickness * (0.95 + 0.22 * sedovBlend);
+                  float rsWidthLocal = rsThickness * (0.88 + 0.28 * sedovBlend);
+                  float forwardShell = exp(-pow((r - RfsLocal) / max(fsWidthLocal, 1e-3), 2.0));
+                  float contactShell = exp(-pow((r - RcdLocal) / max(cdWidthLocal, 1e-3), 2.0));
+                  float reverseShell = exp(-pow((r - RrsLocal) / max(rsWidthLocal, 1e-3), 2.0));
+                  float forwardAniso = mix(pow(abs(n.z), 1.20), 1.0, 0.44);
+                  float reverseAniso = mix(0.74 * equa + 0.30 * pole, 0.66 * equa, 0.35);
+                  float contactAniso = mix(0.62 + 0.38 * equa, 0.62 + 0.38 * pole, 0.28);
+                  rhoForward = max(rhoForward, forwardShell * forwardAniso * smoothstep(0.04, 0.98, evoLocalRet) * (0.88 + 0.52 * collisionCore));
+                  rhoContact = max(rhoContact, contactShell * contactAniso * smoothstep(0.06, 1.0, evoLocalRet) * (0.75 + 0.44 * collisionCore));
+                  rhoRS = max(rhoRS, reverseShell * reverseAniso * smoothstep(0.05, 1.0, evoLocalRet) * (0.84 + 0.46 * collisionCore));
+                  float fsWakeIn = exp(-max(0.0, RfsLocal - r) / max(fsWidthLocal * (2.2 + 1.1 * sedovBlend), 1e-3));
+                  float fsWakeOut = exp(-max(0.0, r - RfsLocal) / max(fsWidthLocal * (3.6 + 1.6 * sedovBlend), 1e-3));
+                  float fsWake = (0.30 * fsWakeIn + 0.16 * fsWakeOut) * forwardAniso * smoothstep(0.03, 1.0, evoSh);
+                  float cdSheath = exp(-abs(r - RcdLocal) / max(cdWidthLocal * (1.8 + 0.8 * sedovBlend), 1e-3)) * contactAniso * 0.16;
+                  float rsSheath = exp(-abs(r - RrsLocal) / max(rsWidthLocal * (1.9 + 0.9 * sedovBlend), 1e-3)) * reverseAniso * 0.18;
+                  rhoForward += fsWake;
+                  rhoContact += cdSheath;
+                  rhoRS += rsSheath;
+
+                  float axisRag = length(p.xy);
+                  float azag = abs(p.z);
+                  float agRise = smoothstep(0.08, 0.72, evoSh);
+                  float agCenter = Rp * (1.30 + 1.05 * agRise);
+                  float agLen = 1.8 + 2.4 * agRise + 0.22 * Rp;
+                  float agAxial = exp(-pow((azag - agCenter) / agLen, 2.0));
+                  float agWidth = 0.65 + 1.7 * agRise + 0.12 * azag;
+                  float agCore = exp(-pow(axisRag / agWidth, 2.0));
+                  float agLimb = exp(-pow((axisRag - agWidth * 0.86) / (0.36 + 0.42 * agRise), 2.0));
+                  float agNoise = 0.72 + 0.28 * noise3(vec3(length(pAdv.xy) * 1.9, abs(pAdv.z) * 0.75 + uTime * 0.12, uTime * 0.08));
+                  float agAxisGate = smoothstep(0.35, 0.95, abs(n.z));
+                  float agRadialGate = smoothstep(Rp * 0.85, Rp * 1.22, r);
+                  float agGate = agRise * mix(0.22, 1.0, agAxisGate) * mix(0.28, 1.0, agRadialGate);
+                  rhoAfterglow = (0.55 * agCore + 0.95 * agLimb) * agAxial * agNoise * agGate * (0.62 + 0.38 * uJetIntensity);
+
+                  float eqEmergence = smoothstep(0.20, 0.95, evoSh);
+                  float polarFade = 1.0 - smoothstep(0.28, 0.98, evoSh);
+                  float jetCool = smoothstep(0.06, 1.0, evoSh);
+                  float daySoften = smoothstep(0.05, 4.5, tDaysLocal);
+                  vec3 colJetSynch = mix(vec3(0.95, 1.12, 1.74), vec3(0.58, 0.80, 1.24), daySoften);
+                  vec3 colJetMix = mix(mix(colorJet, colorJetHot, clamp(0.8 * collisionCore + 0.2 * (1.0 - evoSh), 0.0, 1.0)), colJetSynch, 0.58 * jetCool);
+                  vec3 colCocoonMix = mix(colCocoonLocal, vec3(0.74, 0.80, 1.04), 0.28 * daySoften);
+                  float yEWindNear = mix(yEEqNear, yEPolarNear, pow(abs(n.z), 1.15));
+                  float yEWindFar = mix(yEEqFar, yEPolarFar, pow(abs(n.z), 1.15));
+                  float yEWindLocal = mix(yEWindNear, yEWindFar, ltMix);
+                  float lanthFracLocal = smoothstep(0.30, 0.18, yEWindLocal);
+                  float lanthCurtain = clamp((0.25 + 1.05 * lanthFracLocal) * equa * (0.42 + 0.58 * smoothstep(0.20, 1.0, evoSh)) * uOpacityContrast, 0.0, 2.3);
+                  float lineBlanket = lanthCurtain * (0.70 + 0.58 * equa) * (0.82 + 0.30 * viewEquatorial);
+                  vec3 lanthTransfer = vec3(1.0 + 0.16 * lineBlanket, 1.0 - 0.06 * lineBlanket, 1.0 - 0.40 * lineBlanket);
+                  vec3 colEqTransfer = colEqLocal * lanthTransfer;
+                  vec3 colTorus = mix(colEqTransfer, vec3(1.04, 0.46, 0.24), 0.58 + 0.30 * phaseRedLocal);
+                  vec3 colRSTransfer = colRSLocal * mix(vec3(1.0), lanthTransfer, 0.20);
+                  vec3 colInnerTransfer = colInnerLocal * mix(vec3(1.0), lanthTransfer, 0.45);
+                  vec3 colNestedTransfer = colNestedLocal * lanthTransfer;
+                  vec3 colNebTransfer = colNebulaLocal * mix(vec3(1.0), lanthTransfer, 0.35);
+
+                  float boundaryP = exp(-pow((r - Rp) / (thickP * 0.55 + 1e-3), 2.0));
+                  float boundaryE = exp(-pow((r - Re) / (thickE * 0.55 + 1e-3), 2.0));
+                  float shockBoost = 1.0 + 1.05 * (boundaryP * boundaryE + 0.42 * boundaryP) + 0.42 * (rhoForward + rhoContact + rhoRS);
+                  float transLum = dot(transRGB, vec3(0.2126, 0.7152, 0.0722));
+                  vec3 tauRGB = -log(max(transRGB, vec3(1e-4)));
+                  float tauApprox = dot(tauRGB, vec3(0.30, 0.45, 0.25));
+                  float photoBand = exp(-pow((tauApprox - 1.05) / 0.55, 2.0));
+                  float rhoPhoto = exp(-pow((r - RphLocal) / max(WphLocal, 1e-3), 2.0)) * (0.45 + 0.55 * (0.6 * equa + 0.4 * pole));
+                  vec3 colPhotoTransfer = colPhotoLocal * mix(vec3(1.0), lanthTransfer, 0.25);
+                  float gradP = abs(r - Rp) * rhoP / max(thickP * thickP, 1e-4);
+                  float gradE = abs(r - Re) * rhoE / max(thickE * thickE, 1e-4);
+                  float gradFS = abs(r - RfsLocal) * rhoForward / max(fsThickness * fsThickness, 1e-4);
+                  float gradCD = abs(r - RcdLocal) * rhoContact / max(cdThickness * cdThickness, 1e-4);
+                  float gradRS = abs(r - RrsLocal) * rhoRS / max(rsThickness * rsThickness, 1e-4);
+                  float shockRim = smoothstep(0.16, 1.26, gradP + gradE + 1.6 * gradFS + 1.3 * gradCD + 1.5 * gradRS);
+                  vec3 colShockRim = mix(colRSLocal, vec3(1.06, 1.00, 1.12), 0.30 + 0.10 * phaseBlueLocal);
+                  float vHom = mix(vpScale, veScale, 0.42);
+                  float vSed = vHom * pow(1.0 + 2.8 * evoSh, -0.58);
+                  float vShockNorm = clamp(mix(vHom, vSed, sedovBlend) * (0.90 + 0.18 * collisionCore), 0.30, 1.45);
+                  float shockTNorm = clamp(vShockNorm * vShockNorm * (1.0 + 0.35 * collisionCore), 0.20, 2.30);
+                  float shockHeat = sqrt(shockTNorm) * (0.78 + 0.22 * phaseBlueLocal);
+                  float shockFresh = exp(-evoSh * 7.2) * (0.65 + 0.35 * exp(-tDaysLocal / 0.35));
+                  float teRelax = 1.0 - exp(-evoSh * (5.5 + 3.0 * phaseBlueLocal));
+                  float teFrac = mix(0.36, 1.0, teRelax);
+                  float shockHeatE = shockHeat * teFrac;
+                  float shockNonThermal = shockFresh * (0.45 + 0.55 * collisionCore);
+                  float compFS = pow(max(rhoForward, 0.0), 1.65);
+                  float compRS = pow(max(rhoRS, 0.0), 1.60);
+                  float compCD = pow(max(rhoContact, 0.0), 1.75);
+                  float shockTemporal = smoothstep(0.02, 0.16, evoSh) * (1.0 - 0.10 * smoothstep(0.92, 1.0, evoSh));
+                  compFS *= shockTemporal;
+                  compRS *= shockTemporal;
+                  compCD *= shockTemporal;
+                  float eqTau = uOpacityContrast * pow(max(0.0, 1.0 - abs(n.z)), 1.55) * (0.55 + 0.45 * phaseRedLocal) * (1.0 + 0.22 * lineBlanket);
+                  float shockAtten = exp(-0.42 * eqTau);
+                  float betaShock = clamp(0.08 + 0.10 * vShockNorm, 0.06, 0.24);
+                  vec3 shockFlowDir = normalize(p + n * 0.15 + vec3(1e-6, 1e-6, 1e-6));
+                  float muShock = clamp(dot(shockFlowDir, los), -1.0, 1.0);
+                  float gammaShock = inversesqrt(max(1e-4, 1.0 - betaShock * betaShock));
+                  float dShock = 1.0 / (gammaShock * max(0.22, 1.0 - betaShock * muShock));
+                  float beamShock = clamp(pow(dShock, 2.1), 0.58, 2.55);
+                  vec3 colShockFS = mix(kelvinToRGB(7200.0 + 12400.0 * pow(vShockNorm, 1.05)), vec3(0.68, 0.90, 1.34), 0.26 + 0.36 * phaseBlueLocal);
+                  vec3 colShockRS = mix(colRSLocal, vec3(1.0, 0.78, 0.90), 0.16 + 0.10 * phasePurpleLocal);
+                  vec3 colShockCD = mix(vec3(0.94, 0.84, 1.08), vec3(1.0, 0.58, 0.35), smoothstep(0.25, 1.0, evoSh));
+                  vec3 colShockFresh = mix(vec3(1.08, 1.08, 1.16), vec3(0.82, 0.95, 1.30), teRelax);
+                  float torusRim = exp(-pow((torusRad - torusMajor) / max(torusMinor * 1.25, 1e-4), 2.0)) * exp(-pow((abs(p.z) - torusMinor * 0.55) / max(torusMinor * 0.40, 1e-4), 2.0));
+                  float betaJet = clamp(0.20 + 0.16 * collisionCore + 0.10 * (uJetIntensity / 3.0), 0.14, 0.46);
+                  vec3 jetFlowDir = normalize(vec3(p.xy * 0.28, p.z + 1e-6));
+                  float muJet = clamp(dot(jetFlowDir, los), -1.0, 1.0);
+                  float gammaJet = inversesqrt(max(1e-4, 1.0 - betaJet * betaJet));
+                  float dJet = 1.0 / (gammaJet * max(0.20, 1.0 - betaJet * muJet));
+                  float beamJet = clamp(pow(dJet, 2.35), 0.56, 3.10);
+                  vec3 colJetDopp = mix(colJetMix * vec3(0.96, 0.92, 0.90), colJetMix * vec3(1.05, 1.08, 1.18), smoothstep(1.0, 1.35, dJet));
+                  // Slightly stronger veil attenuation for better late-time visibility.
+                  float diffuseVeilAtten = mix(0.94, 0.62, smoothstep(0.12, 0.95, tDaysLocal));
+                  float thermalPurity = clamp(1.0 - 0.28 * phasePurpleLocal * (1.0 - 0.65 * phaseRedLocal), 0.72, 1.0);
+                  float nonThermalBoost = 1.0 + 0.24 * phasePurpleLocal * (0.65 + 0.35 * (1.0 - phaseRedLocal));
+
+                  vec3 emiss = vec3(0.0);
+                  emiss += thermalPurity * rhoP * (1.65 * polarFade + 0.45) * colPolarLocal;
+                  emiss += thermalPurity * rhoE * (0.45 + 1.12 * eqEmergence + 0.20 * phaseRedLocal) * colEqTransfer;
+                  emiss += thermalPurity * rhoTorus * (0.84 + 1.12 * phaseRedLocal) * colTorus;
+                  emiss += thermalPurity * torusRim * rhoTorus * (0.36 + 0.58 * phaseRedLocal) * vec3(1.08, 0.50, 0.26);
+                  emiss += rhoRS * 1.95 * colRSTransfer;
+                  emiss += rhoRT * 1.20 * colRTLocal;
+                  emiss += nonThermalBoost * rhoJet * (2.25 + 0.75 * collisionCore) * colJetDopp * beamJet;
+                  emiss += mix(nonThermalBoost, 1.0, 0.20) * rhoCocoon * (1.15 + 1.10 * collisionCore) * colCocoonMix;
+                  vec3 cloudChromA = mix(colInnerTransfer, colNebTransfer, 0.38);
+                  vec3 cloudChromB = mix(colNestedTransfer, colCocoonMix, 0.46);
+                  vec3 cloudChrom = mix(cloudChromA, cloudChromB, smoothstep(0.25, 0.85, corrSeed));
+                  emiss += thermalPurity * rhoInnerCloud * (1.05 + 0.50 * phaseBlueLocal + 0.06 * phasePurpleLocal) * mix(colInnerTransfer, colCocoonMix, 0.10 * phasePurpleLocal);
+                  emiss += thermalPurity * rhoShockCloud * (1.10 + 0.70 * phaseBlueLocal + 0.05 * phasePurpleLocal) * mix(colInnerTransfer, cloudChrom, 0.20);
+                  emiss += thermalPurity * rhoNestedShell * (0.95 + 0.40 * collisionCore + 0.20 * phaseRedLocal) * mix(colNestedTransfer, colRTLocal, 0.06 * phasePurpleLocal);
+                  emiss += thermalPurity * rhoNebula * diffuseVeilAtten * (0.86 + 0.34 * phaseBlueLocal + 0.08 * phasePurpleLocal) * mix(colNebTransfer, cloudChrom, 0.36);
+                  emiss += rhoForward * vec3(0.66, 0.86, 1.25);
+                  emiss += rhoContact * mix(vec3(0.90, 0.78, 1.18), vec3(0.98, 0.62, 0.42), smoothstep(0.35, 1.0, evoLocal)) * (0.78 + 0.32 * collisionCore);
+                  emiss += nonThermalBoost * rhoAfterglow * (0.88 + 0.32 * phaseBlueLocal) * colAfterglowLocal;
+                  emiss += thermalPurity * rhoPhoto * photoBand * (1.15 + 0.25 * phaseBlueLocal) * colPhotoTransfer;
+                  emiss += thermalPurity * rhoAmbient * (0.44 * diffuseVeilAtten) * vec3(0.90, 0.72, 0.82);
+                  emiss += shockRim * (0.72 + 0.52 * collisionCore) * colShockRim;
+                  emiss += mix(1.0, nonThermalBoost, 0.35) * compFS * 0.82 * shockHeatE * colShockFS * shockAtten * beamShock;
+                  emiss += mix(1.0, nonThermalBoost, 0.35) * compRS * 0.74 * shockHeatE * colShockRS * shockAtten * beamShock;
+                  emiss += mix(1.0, nonThermalBoost, 0.35) * compCD * 0.66 * shockHeatE * colShockCD * mix(shockAtten, 1.0, 0.35) * mix(beamShock, 1.0, 0.35);
+                  emiss += mix(1.0, nonThermalBoost, 0.55) * (0.28 * compFS + 0.24 * compRS) * shockNonThermal * colShockFresh * beamShock;
+                  float domainFade = 1.0 - smoothstep(boundRadius * 0.84, boundRadius * 1.06, r);
+                  emiss *= domainFade;
+                  emiss *= heatNormLocal * thermLocal * shockBoost;
+                  float nebulaNonThermal = (0.14 + 0.26 * exp(-tDaysLocal / 9.0)) * phaseNebulaLocal * diffuseVeilAtten;
+                  emiss += rhoNebula * nebulaNonThermal * colNebTransfer * (0.82 + 0.30 * collisionCore);
+
+                  float corePulse = 0.68 + 0.32 * sin(uTime * 9.0);
+                  float coreGlow = exp(-pow(r / 0.36, 2.0)) * (0.95 + 0.8 * corePulse) * uRemnantLum;
+                  emiss += coreGlow * vec3(2.0, 1.82, 2.05);
+
+                  float blastHalo = 0.0;
+                  if (uAct < 2.5) {
+                    float blastR = 1.45 + 8.2 * act2Local;
+                    float blastR2 = blastR * (1.18 + 0.12 * act2Local);
+                    float blastW = 0.20 + 0.34 * act2Local;
+                    float blast = exp(-pow((r - blastR) / blastW, 2.0));
+                    float blast2 = exp(-pow((r - blastR2) / (blastW * 1.42), 2.0)) * smoothstep(0.18, 1.0, act2Local);
+                    float flashAniso = mix(0.50, 1.0, pow(abs(n.z), 1.6));
+                    blastHalo = (blast + 0.38 * blast2) * uCollisionFlash * flashAniso * promptVisibility;
+                    emiss += blastHalo * vec3(4.2, 3.4, 3.2);
+                    emiss += exp(-pow(r / 1.15, 2.0)) * uCollisionFlash * (0.45 + 0.55 * promptVisibility) * vec3(5.9, 5.3, 6.9);
+                  } else {
+                    float earlyShock = exp(-evoLocal * 6.2);
+                    float blastR3 = mix(2.0, Rp * 0.95, smoothstep(0.0, 0.32, evoLocal));
+                    float blastR4 = blastR3 * (1.26 + 0.16 * smoothstep(0.0, 0.65, evoLocal));
+                    float blastW3 = 0.24 + 0.40 * evoLocal;
+                    float shell3 = exp(-pow((r - blastR3) / blastW3, 2.0));
+                    float shell4 = exp(-pow((r - blastR4) / (blastW3 * 1.55), 2.0)) * smoothstep(0.08, 0.85, evoLocal);
+                    blastHalo = (shell3 + 0.42 * shell4) * earlyShock * (0.75 + 0.5 * uEnergyScale) * (0.55 + 0.45 * promptVisibility);
+                    emiss += blastHalo * vec3(1.4, 1.1, 1.7);
+                  }
+
+                  float sigma = (rhoP * 0.72 + rhoE * 1.18 * uOpacityContrast + rhoTorus * (1.35 * uOpacityContrast) + rhoRS * 0.9 + rhoRT * 1.1 + rhoJet * 0.33 + rhoCocoon * 0.52 + rhoInnerCloud * 0.42 + rhoShockCloud * 0.52 + rhoNestedShell * 0.48 + rhoNebula * (0.46 * diffuseVeilAtten) + rhoAfterglow * 0.34 + rhoPhoto * 0.46 + rhoForward * 0.34 + rhoContact * 0.40 + rhoAmbient * (0.34 * diffuseVeilAtten) + blastHalo * 0.3);
+                  sigma *= opacityScale * densityScale * 0.34;
+
+                  float dtEff = dt * stepMul;
+                  if (sigma < 0.0015 && coarseShell < 0.0024 && (rhoJet + rhoCocoon + rhoTorus + rhoInnerCloud + rhoShockCloud + rhoNestedShell + rhoNebula + rhoAfterglow + rhoPhoto + rhoForward + rhoContact) < 0.0018) {
+                    t += dtEff;
+                    continue;
+                  }
+
+                  float selfTau = (rhoE * 1.30 * uOpacityContrast + rhoTorus * (1.42 * uOpacityContrast) + rhoNestedShell * 0.78 + rhoNebula * 0.68 + rhoCocoon * 0.52 + rhoP * 0.62 + rhoShockCloud * 0.72 + rhoContact * 0.46) * max(boundRadius - r, 0.0) * 0.040;
+                  float selfShadow = exp(-selfTau);
+                  float frontShadow = mix(0.60, 1.0, pow(transLum, 0.30));
+                  emiss *= mix(frontShadow, frontShadow * selfShadow, 0.58);
+
+                  float albedoEq = mix(0.38, 0.20, smoothstep(0.20, 2.20, tauApprox));
+                  float albedoPol = mix(0.78, 0.46, smoothstep(0.20, 2.20, tauApprox));
+                  float albedo = clamp(mix(albedoEq, albedoPol, pole), 0.08, 0.85);
+                  vec3 albedoRGB = clamp(vec3(albedo * 0.80, albedo * 0.95, albedo * 1.08), 0.0, 0.95);
+                  float muScat = clamp(dot(n, los), -1.0, 1.0);
+                  float hgForward = hgPhase(muScat, mix(0.24, 0.64, pole));
+                  float hgBack = hgPhase(muScat, -0.12);
+                  float phaseScat = clamp((0.72 * hgForward + 0.28 * hgBack) / 0.07957747, 0.10, 3.20);
+                  vec3 scatterCol = mix(colPhotoTransfer, mix(colShockFS, colNebTransfer, 0.35), 0.55);
+                  float scatterDensity = rhoForward + 0.72 * rhoContact + 0.36 * rhoTorus + 0.52 * rhoCocoon + 0.32 * rhoNebula * diffuseVeilAtten;
+                  emiss += scatterDensity * (0.07 + 0.22 * albedo) * phaseScat * scatterCol;
+
+                  float lanthIon = 0.55 + 0.45 * smoothstep(0.15, 4.5, tDaysLocal);
+                  float blueOpacityBoost = 1.08 + (0.98 * lineBlanket + 0.20 * phaseRedLocal) * lanthIon;
+                  float greenOpacityBoost = 1.00 + (0.58 * lineBlanket + 0.08 * phaseRedLocal) * (0.78 + 0.22 * lanthIon);
+                  float redOpacityBoost = 0.90 + 0.24 * lineBlanket * (0.52 + 0.48 * lanthIon);
+                  vec3 sigmaRGB = sigma * vec3(redOpacityBoost, greenOpacityBoost, blueOpacityBoost);
+                  vec3 sigmaScat = sigmaRGB * albedoRGB;
+                  vec3 sigmaAbs = max(sigmaRGB - sigmaScat * 0.62, vec3(1e-6));
+                  vec3 alphaRGB = 1.0 - exp(-(sigmaAbs + sigmaScat * 0.26) * dtEff);
+                  vec3 contrib = emiss * alphaRGB;
+                  accum += transRGB * contrib;
+                  transRGB *= (vec3(1.0) - alphaRGB);
+                  t += dtEff;
+
+                  if (max(max(transRGB.r, transRGB.g), transRGB.b) < 0.01) {
+                    break;
+                  }
+                }
+              }
+            }
+
+            gl_FragColor = vec4(max(accum, vec3(0.0)), 1.0);
+          }
+        `,
+      };
+
+      const temporalShader = {
+        uniforms: {
+          tCurrent: { value: volumeCurrentTarget.texture },
+          tHistory: { value: volumeHistoryRead.texture },
+          uHistoryBlend: { value: 0.0 },
+          uHistoryReset: { value: 1.0 },
+          uTemporalClamp: { value: 0.55 },
+        },
+        vertexShader: fullscreenVertex,
+        fragmentShader: /* glsl */ `
+          precision highp float;
+          varying vec2 vUv;
+          uniform sampler2D tCurrent;
+          uniform sampler2D tHistory;
+          uniform float uHistoryBlend;
+          uniform float uHistoryReset;
+          uniform float uTemporalClamp;
+
+          void main() {
+            vec3 current = texture2D(tCurrent, vUv).rgb;
+            vec3 history = texture2D(tHistory, vUv).rgb;
+
+            vec3 low = current - vec3(uTemporalClamp);
+            vec3 high = current + vec3(uTemporalClamp);
+            history = clamp(history, low, high);
+
+            float blend = clamp(uHistoryBlend, 0.0, 0.98);
+            vec3 lumW = vec3(0.2126, 0.7152, 0.0722);
+            float curLum = max(dot(current, lumW), 1e-5);
+            float hisLum = max(dot(history, lumW), 1e-5);
+            vec3 curChrom = current / curLum;
+            vec3 hisChrom = history / hisLum;
+            float lumJump = abs(curLum - hisLum);
+            float chromJump = length(curChrom - hisChrom);
+            float transitionGuard = 1.0 - smoothstep(0.9, 4.0, lumJump);
+            float chromGuard = 1.0 - smoothstep(0.08, 0.75, chromJump);
+            float stability = transitionGuard * chromGuard;
+            float lumBlend = blend * mix(0.66, 1.0, transitionGuard);
+            float chromBlend = blend * mix(0.54, 1.0, stability);
+            float outLum = mix(curLum, hisLum, lumBlend);
+            vec3 outChrom = mix(curChrom, hisChrom, chromBlend);
+            outChrom = max(outChrom, vec3(0.0));
+            float chromLum = max(dot(outChrom, lumW), 1e-5);
+            outChrom /= chromLum;
+            vec3 accumulated = outChrom * outLum;
+            vec3 outColor = mix(accumulated, current, step(0.5, uHistoryReset));
+            gl_FragColor = vec4(max(outColor, vec3(0.0)), 1.0);
+          }
+        `,
+      };
+
+      const compositeShader = {
+        uniforms: {
+          tBase: { value: baseTarget.texture },
+          tVolume: { value: volumeHistoryRead.texture },
+          uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+          uVolumeResolution: { value: new THREE.Vector2(initialVolSize.w, initialVolSize.h) },
+          uAct: { value: 1.0 },
+          uAct2Progress: { value: 0.0 },
+          uBloomStrength: { value: 1.25 },
+          uChromAb: { value: 0.08 },
+          uSharpen: { value: 0.65 },
+          uGRBDirect: { value: 0.0 },
+          uGRBPrompt: { value: 0.0 },
+          uGRBCocoon: { value: 0.0 },
+          uGRBShockR: { value: 0.0 },
+          uGRBShockW: { value: 0.04 },
+          uGRBAge: { value: -1.0 },
+          uGRBCenter: { value: new THREE.Vector2(0.5, 0.5) },
+          uGRBAxisDir: { value: new THREE.Vector2(1.0, 0.0) },
+          uStarScreen1: { value: new THREE.Vector2(-10, -10) },
+          uStarScreen2: { value: new THREE.Vector2(-10, -10) },
+          uStarVis1: { value: 0.0 },
+          uStarVis2: { value: 0.0 },
+        },
+        vertexShader: fullscreenVertex,
+        fragmentShader: /* glsl */ `
+          precision highp float;
+          varying vec2 vUv;
+          uniform sampler2D tBase;
+          uniform sampler2D tVolume;
+          uniform vec2 uResolution;
+          uniform vec2 uVolumeResolution;
+          uniform float uAct;
+          uniform float uAct2Progress;
+          uniform float uBloomStrength;
+          uniform float uChromAb;
+          uniform float uSharpen;
+          uniform float uGRBDirect;
+          uniform float uGRBPrompt;
+          uniform float uGRBCocoon;
+          uniform float uGRBShockR;
+          uniform float uGRBShockW;
+          uniform float uGRBAge;
+          uniform vec2 uGRBCenter;
+          uniform vec2 uGRBAxisDir;
+          uniform vec2 uStarScreen1;
+          uniform vec2 uStarScreen2;
+          uniform float uStarVis1;
+          uniform float uStarVis2;
+
+          vec3 sampleBase(vec2 uv) {
+            return texture2D(tBase, clamp(uv, 0.0, 1.0)).rgb;
+          }
+
+          vec3 sampleVolume(vec2 uv) {
+            vec2 texel = 1.0 / uVolumeResolution;
+            vec3 c = texture2D(tVolume, clamp(uv, 0.0, 1.0)).rgb;
+            vec3 n0 = texture2D(tVolume, clamp(uv + vec2(texel.x, 0.0), 0.0, 1.0)).rgb;
+            vec3 n1 = texture2D(tVolume, clamp(uv - vec2(texel.x, 0.0), 0.0, 1.0)).rgb;
+            vec3 n2 = texture2D(tVolume, clamp(uv + vec2(0.0, texel.y), 0.0, 1.0)).rgb;
+            vec3 n3 = texture2D(tVolume, clamp(uv - vec2(0.0, texel.y), 0.0, 1.0)).rgb;
+            vec3 d0 = texture2D(tVolume, clamp(uv + vec2(texel.x, texel.y), 0.0, 1.0)).rgb;
+            vec3 d1 = texture2D(tVolume, clamp(uv + vec2(-texel.x, texel.y), 0.0, 1.0)).rgb;
+            vec3 d2 = texture2D(tVolume, clamp(uv + vec2(texel.x, -texel.y), 0.0, 1.0)).rgb;
+            vec3 d3 = texture2D(tVolume, clamp(uv + vec2(-texel.x, -texel.y), 0.0, 1.0)).rgb;
+            vec3 tent = c * 0.36 + (n0 + n1 + n2 + n3) * 0.12 + (d0 + d1 + d2 + d3) * 0.04;
+            vec3 detail = c - (n0 + n1 + n2 + n3) * 0.25;
+            return max(tent + detail * 0.28, vec3(0.0));
+          }
+
+          vec3 starAura(vec2 uv, vec2 center, float vis) {
+            vec2 d = uv - center;
+            float r2 = dot(d, d);
+            float core = exp(-r2 * 1250.0);
+            float halo = exp(-r2 * 220.0);
+            float outer = exp(-r2 * 60.0);
+            float streak = exp(-abs(d.y) * 240.0) * exp(-abs(d.x) * 8.0);
+            vec3 tint = vec3(0.72, 0.95, 1.55);
+            return vis * tint * (core * 0.95 + halo * 0.40 + outer * 0.12 + streak * 0.34);
+          }
+
+          vec3 kelvinToRGBLite(float tempK) {
+            float t = clamp(tempK, 1200.0, 40000.0) / 100.0;
+            float r;
+            float g;
+            float b;
+
+            if (t <= 66.0) {
+              r = 1.0;
+              g = clamp(0.39008158 * log(max(t, 1e-3)) - 0.63184144, 0.0, 1.0);
+            } else {
+              float tt = t - 60.0;
+              r = clamp(1.29293619 * pow(tt, -0.13320476), 0.0, 1.0);
+              g = clamp(1.12989086 * pow(tt, -0.07551485), 0.0, 1.0);
+            }
+
+            if (t >= 66.0) {
+              b = 1.0;
+            } else if (t <= 19.0) {
+              b = 0.0;
+            } else {
+              b = clamp(0.54320679 * log(t - 10.0) - 1.19625409, 0.0, 1.0);
+            }
+
+            return vec3(r, g, b);
+          }
+
+          float luminanceOf(vec3 c) {
+            return dot(c, vec3(0.2126, 0.7152, 0.0722));
+          }
+
+          vec3 compressHighlights(vec3 c) {
+            float y = max(luminanceOf(c), 1e-5);
+            float ySoft = log(1.0 + 0.55 * y) / 0.55;
+            vec3 chrom = c / y;
+            chrom = pow(max(chrom, vec3(0.0)), vec3(0.97));
+            float sat = 1.0 + 0.08 * smoothstep(0.45, 3.2, y);
+            return chrom * ySoft * sat;
+          }
+
+          void main() {
+            vec2 center = vec2(0.5);
+            vec2 dirToCenter = (vUv - center);
+            float distToCenter = length(dirToCenter);
+            vec2 nDir = distToCenter > 1e-5 ? dirToCenter / distToCenter : vec2(0.0, 0.0);
+
+            float ab = uChromAb * 0.0024 * (0.4 + distToCenter * 1.35);
+            vec3 caColor;
+            caColor.r = sampleBase(vUv + nDir * ab).r;
+            caColor.g = sampleBase(vUv).g;
+            caColor.b = sampleBase(vUv - nDir * ab).b;
+
+            vec2 texel = 1.0 / uResolution;
+            vec3 b0 = sampleBase(vUv + vec2(texel.x, 0.0));
+            vec3 b1 = sampleBase(vUv - vec2(texel.x, 0.0));
+            vec3 b2 = sampleBase(vUv + vec2(0.0, texel.y));
+            vec3 b3 = sampleBase(vUv - vec2(0.0, texel.y));
+            vec3 blurBase = (b0 + b1 + b2 + b3) * 0.25;
+            vec3 sceneColor = max(caColor + (caColor - blurBase) * (uSharpen * 1.25), vec3(0.0));
+
+            vec3 volumeColor = sampleVolume(vUv);
+            vec3 outColor = sceneColor + volumeColor;
+            outColor += starAura(vUv, uStarScreen1, uStarVis1);
+            outColor += starAura(vUv, uStarScreen2, uStarVis2);
+
+            vec2 d = vUv - uGRBCenter;
+            float r = length(d);
+            vec2 axis = normalize(uGRBAxisDir + vec2(1e-5, 0.0));
+            vec2 nAxis = vec2(-axis.y, axis.x);
+            float along = dot(d, axis);
+            float across = dot(d, nAxis);
+            float grbAge = max(uGRBAge, 0.0);
+            float hardPhase = exp(-grbAge / 0.35);
+            float softPhase = smoothstep(0.35, 3.8, grbAge);
+
+            float promptCore = exp(-r * r * 220.0);
+            float promptLine = exp(-abs(across) * 230.0) * exp(-abs(along) * 3.2);
+            float promptHalo = exp(-r * r * 20.0);
+            float promptSheath = exp(-abs(across) * (88.0 - 34.0 * uGRBDirect)) * exp(-abs(along) * 1.8);
+            float promptEdge = exp(-pow(abs(across) / (0.08 + 0.06 * hardPhase), 2.0)) * exp(-abs(along) * 1.45);
+            vec3 promptColHard = kelvinToRGBLite(22000.0);
+            vec3 promptColSoft = kelvinToRGBLite(9000.0);
+            vec3 promptCol = mix(promptColHard, promptColSoft, 1.0 - hardPhase);
+            outColor += uGRBDirect * promptCol * (2.0 * promptCore + 1.65 * promptLine + 0.30 * promptHalo + 0.42 * promptSheath);
+            outColor += uGRBDirect * mix(vec3(0.68, 0.88, 1.48), vec3(0.56, 0.74, 1.18), softPhase) * (0.42 * promptEdge);
+
+            // Prompt detector saturation proxy: very short and strongly axis-collimated.
+            float promptSatCore = exp(-r * r * 78.0);
+            float promptSatHalo = exp(-r * r * 5.4);
+            float promptSatAxisFalloff = max(26.0, 150.0 - 70.0 * clamp(uGRBPrompt, 0.0, 2.5));
+            float promptSatAxis = exp(-abs(across) * promptSatAxisFalloff) * exp(-abs(along) * 1.15);
+            float promptSatEdge = exp(-pow(abs(across) / (0.04 + 0.11 * hardPhase), 2.0)) * exp(-abs(along) * 1.0);
+            float promptDisc = exp(-pow(r / (0.06 + 0.03 * hardPhase), 2.0));
+            vec3 satHard = kelvinToRGBLite(28000.0);
+            vec3 satSoft = kelvinToRGBLite(12000.0);
+            vec3 satCol = mix(satHard, satSoft, 1.0 - hardPhase);
+            outColor += uGRBPrompt * satCol * (2.40 * promptSatCore + 1.15 * promptSatHalo + 1.75 * promptSatAxis + 0.42 * promptSatEdge + 0.85 * promptDisc);
+
+            float shockW = max(uGRBShockW, 1e-4);
+            float az = atan(d.y, d.x);
+            float ringWarp = 0.88 + 0.12 * sin(az * 11.0 + r * 38.0 - grbAge * 5.4);
+            float shockRing = exp(-pow((r - uGRBShockR) / max(shockW, 1e-4), 2.0));
+            float shockRing2 = exp(-pow((r - uGRBShockR * 1.38) / max(shockW * 1.45, 1e-4), 2.0));
+            float shockRing3 = exp(-pow((r - uGRBShockR * 1.80) / max(shockW * 2.20, 1e-4), 2.0)) * exp(-grbAge / 2.1);
+            float cocoonHaze = exp(-r * r * 8.0);
+            float cocoonWing = exp(-pow(abs(across) / (0.06 + 0.24 * uGRBCocoon), 2.0)) * exp(-abs(along) * 1.35);
+            float axisWake = exp(-pow(abs(across) / (0.05 + 0.18 * uGRBCocoon), 2.0)) * exp(-max(0.0, abs(along) - uGRBShockR * 0.75) * 1.6);
+            vec3 cocoonColEarly = kelvinToRGBLite(12500.0);
+            vec3 cocoonColLate = mix(kelvinToRGBLite(6500.0), vec3(0.86, 0.62, 1.10), 0.40);
+            vec3 cocoonCol = mix(cocoonColEarly, cocoonColLate, softPhase);
+            // Cocoon becomes optically thinner with expansion; suppress broad late-time veil.
+            float cocoonBroadFade = exp(-grbAge / 1.15);
+            float cocoonNarrowFade = exp(-grbAge / 2.0);
+            float cocoonShockFade = exp(-grbAge / 1.7);
+            float cocoonHazeTerm = cocoonHaze * cocoonBroadFade;
+            float cocoonWingTerm = cocoonWing * cocoonNarrowFade;
+            float axisWakeTerm = axisWake * cocoonNarrowFade;
+            outColor += uGRBCocoon * cocoonCol * (
+              1.00 * shockRing * ringWarp +
+              0.44 * shockRing2 * cocoonShockFade +
+              0.24 * shockRing3 +
+              0.09 * cocoonHazeTerm +
+              0.16 * cocoonWingTerm +
+              0.12 * axisWakeTerm
+            );
+
+            float luminance = luminanceOf(outColor);
+            float bloomThreshold = mix(0.56, 0.90, smoothstep(0.8, 4.0, luminance));
+            float bloomMask = smoothstep(bloomThreshold, bloomThreshold + 1.45, luminance);
+            float act2BloomSupp = uAct < 2.5 ? (0.72 + 0.28 * uAct2Progress) : 1.0;
+            float act3VeilCut = uAct > 2.5 ? 0.70 : 1.0;
+            float bloomLimiter = 1.0 / (1.0 + 0.24 * luminance);
+            vec3 bloomSeed = blurBase + volumeColor * ((0.20 * act2BloomSupp + 0.08) * act3VeilCut);
+            vec3 bloomColor = bloomSeed * bloomMask * (0.84 * uBloomStrength) * bloomLimiter;
+            vec3 chromaRef = outColor / max(luminance, 1e-5);
+            float bloomLum = luminanceOf(bloomColor);
+            bloomColor = mix(bloomColor, chromaRef * bloomLum, 0.58);
+            outColor += bloomColor + volumeColor * (((0.10 + 0.05 * act2BloomSupp) * act3VeilCut) * uBloomStrength * bloomLimiter);
+            outColor = compressHighlights(outColor);
+
+            gl_FragColor = vec4(max(outColor, vec3(0.0)), 1.0);
+          }
+        `,
+      };
+
+      const volumeMaterial = new THREE.ShaderMaterial({
+        uniforms: volumeShader.uniforms,
+        vertexShader: volumeShader.vertexShader,
+        fragmentShader: volumeShader.fragmentShader,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const temporalMaterial = new THREE.ShaderMaterial({
+        uniforms: temporalShader.uniforms,
+        vertexShader: temporalShader.vertexShader,
+        fragmentShader: temporalShader.fragmentShader,
+        depthTest: false,
+        depthWrite: false,
+      });
+      const compositeMaterial = new THREE.ShaderMaterial({
+        uniforms: compositeShader.uniforms,
+        vertexShader: compositeShader.vertexShader,
+        fragmentShader: compositeShader.fragmentShader,
+        depthTest: false,
+        depthWrite: false,
+      });
+
+      const volumeScene = new THREE.Scene();
+      const temporalScene = new THREE.Scene();
+      const compositeScene = new THREE.Scene();
+      volumeScene.add(new THREE.Mesh(postGeometry, volumeMaterial));
+      temporalScene.add(new THREE.Mesh(postGeometry, temporalMaterial));
+      compositeScene.add(new THREE.Mesh(postGeometry, compositeMaterial));
+
+      const starVertexShader = /* glsl */ `
+        uniform vec3 uDeformDir;
+        uniform float uDeform;
+        uniform float uTime;
+        uniform float uBarMode;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        varying vec3 vLocalPos;
+
+        void main() {
+          vec3 p = position;
+          vec3 d = normalize(uDeformDir + vec3(1e-6));
+          float tidal = clamp(uDeform, 0.0, 1.0);
+
+          float par = dot(p, d);
+          vec3 pPar = d * par;
+          vec3 pPerp = p - pPar;
+
+          // Prolate deformation expected from tidal forces near contact.
+          float stretch = 1.0 + tidal * 0.82;
+          float squash = 1.0 - tidal * 0.26;
+          p = pPar * stretch + pPerp * squash;
+
+          // Slight Roche-like cusp toward the companion-facing hemisphere.
+          float face = smoothstep(-0.08, 1.0, par);
+          p += d * face * tidal * 0.12;
+
+          // m=2 bar-mode/shear oscillation near contact.
+          float phi = atan(p.y, p.x);
+          float bar = sin(2.0 * (phi - uTime * 1.85));
+          float barAmp = 0.05 * clamp(uBarMode, 0.0, 1.0);
+          p.xy *= vec2(1.0 + barAmp * bar, 1.0 - barAmp * bar);
+
+          // Low-amplitude surface agitation for plasma-like granulation.
+          p += normal * (0.005 + 0.010 * tidal) * sin(uTime * 1.5 + position.y * 14.0 + position.x * 6.0);
+
+          vec4 wp = modelMatrix * vec4(p, 1.0);
+          vWorldPos = wp.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * normalize(p));
+          vLocalPos = normalize(p);
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `;
+
+      const starFragmentShader = /* glsl */ `
+        precision highp float;
+        uniform vec3 uCamPos;
+        uniform float uTemp;
+        uniform float uIntensity;
+        uniform vec3 uBaseColor;
+        uniform float uTime;
+        uniform float uRadialVel;
+        uniform float uTidalHeat;
+        uniform vec3 uCompanionDir;
+        uniform vec3 uShearDir;
+        uniform float uShearHeat;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        varying vec3 vLocalPos;
+
+        float hash(vec2 p) {
+          p = fract(p * vec2(123.34, 456.21));
+          p += dot(p, p + 45.32);
+          return fract(p.x * p.y);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          float a = hash(i + vec2(0.0, 0.0));
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float fbm(vec2 p) {
+          float sum = 0.0;
+          float amp = 0.5;
+          for (int i = 0; i < 5; i++) {
+            sum += amp * noise(p);
+            p = p * 2.03 + vec2(1.71, -0.83);
+            amp *= 0.5;
+          }
+          return sum;
+        }
+
+        vec3 kelvinToRGB(float tempK) {
+          float t = clamp(tempK, 1200.0, 40000.0) / 100.0;
+          float r;
+          float g;
+          float b;
+
+          if (t <= 66.0) {
+            r = 1.0;
+            g = clamp(0.39008158 * log(max(t, 1e-3)) - 0.63184144, 0.0, 1.0);
+          } else {
+            float tt = t - 60.0;
+            r = clamp(1.29293619 * pow(tt, -0.13320476), 0.0, 1.0);
+            g = clamp(1.12989086 * pow(tt, -0.07551485), 0.0, 1.0);
+          }
+
+          if (t >= 66.0) {
+            b = 1.0;
+          } else if (t <= 19.0) {
+            b = 0.0;
+          } else {
+            b = clamp(0.54320679 * log(t - 10.0) - 1.19625409, 0.0, 1.0);
+          }
+
+          return vec3(r, g, b);
+        }
+
+        void main() {
+          vec3 N = normalize(vWorldNormal);
+          vec3 V = normalize(uCamPos - vWorldPos);
+          float mu = clamp(dot(N, V), 0.0, 1.0);
+          float limb = clamp(1.0 - 0.42 * (1.0 - mu) - 0.18 * (1.0 - sqrt(max(mu, 1e-4))), 0.25, 1.0);
+          float fres = pow(1.0 - mu, 2.9);
+
+          vec2 uv;
+          uv.x = atan(vLocalPos.z, vLocalPos.x) / 6.28318530718 + 0.5;
+          uv.y = asin(clamp(vLocalPos.y, -1.0, 1.0)) / 3.14159265359 + 0.5;
+          vec2 drift = vec2(uTime * 0.014, -uTime * 0.009);
+          float gran1 = fbm(uv * 180.0 + drift * 8.0);
+          float gran2 = fbm(uv * 380.0 - drift * 13.0);
+          float gran3 = fbm((uv.yx + vec2(0.23, 0.71)) * 620.0 + drift * 21.0);
+          float micro = mix(gran1, gran2, 0.45);
+          micro = mix(micro, gran3, 0.24);
+          float hotspots = smoothstep(0.74, 0.99, micro);
+
+          float Tphys = mix(6.5e5, 1.6e6, clamp(uTemp, 0.0, 1.0));
+          float logT = clamp((log(Tphys) / log(10.0) - 4.0) / 2.4, 0.0, 1.0);
+          float pseudoK = mix(7600.0, 28000.0, pow(logT, 0.86));
+
+          float beta = clamp(uRadialVel, -0.22, 0.22);
+          float doppler = sqrt((1.0 + beta) / max(1e-4, 1.0 - beta));
+          float kObs = pseudoK * mix(1.0, doppler, 0.55);
+          vec3 thermal = kelvinToRGB(kObs);
+          float beaming = clamp(pow(doppler, 2.2), 0.72, 1.48);
+
+          vec3 companion = normalize(uCompanionDir + vec3(1e-5));
+          vec3 shearDir = normalize(uShearDir + vec3(1e-5));
+          float faceHeat = pow(max(dot(normalize(vLocalPos), companion), 0.0), 3.2);
+          float shear = smoothstep(0.52, 0.90, fbm(uv * 240.0 + vec2(uTime * 0.09, -uTime * 0.06)));
+          float tidalHot = uTidalHeat * (0.75 * faceHeat + 0.35 * shear * faceHeat);
+          vec3 tidalCol = kelvinToRGB(kObs * 1.12);
+          float shearBand = pow(max(dot(N, companion), 0.0), 1.85) * smoothstep(0.20, 0.95, 1.0 - abs(dot(N, shearDir)));
+          float shearFil = smoothstep(0.46, 0.90, fbm(uv * 320.0 + vec2(uTime * 0.13, -uTime * 0.08)));
+          float shearHot = uShearHeat * shearBand * (0.58 + 0.42 * shearFil);
+          vec3 shearCol = kelvinToRGB(kObs * 1.20);
+
+          vec3 col = thermal * (0.98 + micro * 0.34 + hotspots * 0.20);
+          col *= limb * beaming;
+          col = mix(col, col * 1.08 + uBaseColor * 0.25, 0.45);
+          col += tidalCol * tidalHot * 0.75;
+          col += shearCol * shearHot * 0.70;
+          col += vec3(0.23, 0.56, 1.05) * fres * 0.42;
+
+          float outIntensity = mix(1.2, 2.15, clamp(uIntensity, 0.0, 2.2));
+          gl_FragColor = vec4(col * outIntensity, 1.0);
+        }
+      `;
+
+      const starGeometry = new THREE.SphereGeometry(1.0, 128, 96);
+      const starUniformTemplate = {
+        uCamPos: { value: camera.position.clone() },
+        uTemp: { value: 0.65 },
+        uIntensity: { value: 1.0 },
+        uBaseColor: { value: new THREE.Color(0.58, 0.75, 1.0) },
+        uDeformDir: { value: new THREE.Vector3(1, 0, 0) },
+        uDeform: { value: 0.0 },
+        uBarMode: { value: 0.0 },
+        uRadialVel: { value: 0.0 },
+        uTidalHeat: { value: 0.0 },
+        uCompanionDir: { value: new THREE.Vector3(1, 0, 0) },
+        uShearDir: { value: new THREE.Vector3(0, 1, 0) },
+        uShearHeat: { value: 0.0 },
+        uTime: { value: 0.0 },
+      };
+
+      function cloneUniforms(uniforms) {
+        return {
+          uCamPos: { value: uniforms.uCamPos.value.clone() },
+          uTemp: { value: uniforms.uTemp.value },
+          uIntensity: { value: uniforms.uIntensity.value },
+          uBaseColor: { value: uniforms.uBaseColor.value.clone() },
+          uDeformDir: { value: uniforms.uDeformDir.value.clone() },
+          uDeform: { value: uniforms.uDeform.value },
+          uBarMode: { value: uniforms.uBarMode.value },
+          uRadialVel: { value: uniforms.uRadialVel.value },
+          uTidalHeat: { value: uniforms.uTidalHeat.value },
+          uCompanionDir: { value: uniforms.uCompanionDir.value.clone() },
+          uShearDir: { value: uniforms.uShearDir.value.clone() },
+          uShearHeat: { value: uniforms.uShearHeat.value },
+          uTime: { value: uniforms.uTime.value },
+        };
+      }
+
+      const starMat1 = new THREE.ShaderMaterial({
+        uniforms: cloneUniforms(starUniformTemplate),
+        vertexShader: starVertexShader,
+        fragmentShader: starFragmentShader,
+        transparent: false,
+      });
+      starMat1.uniforms.uBaseColor.value.setRGB(0.58, 0.77, 1.0);
+
+      const starMat2 = new THREE.ShaderMaterial({
+        uniforms: cloneUniforms(starUniformTemplate),
+        vertexShader: starVertexShader,
+        fragmentShader: starFragmentShader,
+        transparent: false,
+      });
+      starMat2.uniforms.uBaseColor.value.setRGB(0.64, 0.80, 1.0);
+
+      const star1 = new THREE.Mesh(starGeometry, starMat1);
+      const star2 = new THREE.Mesh(starGeometry, starMat2);
+      scene.add(star1);
+      scene.add(star2);
+
+      const precursorBridgeVertexShader = /* glsl */ `
+        uniform float uTime;
+        uniform float uStrength;
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          vec3 p = position;
+          float y = uv.y * 2.0 - 1.0;
+          float mid = 1.0 - abs(y);
+          // Gentle plume widening from the L1 throat into both stars.
+          p.xz *= 0.90 + 0.22 * mid + 0.16 * uStrength;
+          // Kelvin-Helmholtz-like rolls without spring-like geometry.
+          float roll = sin(uv.y * 13.0 - uTime * 1.4) * (0.05 + 0.05 * uStrength) * mid;
+          p.x += roll;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }
+      `;
+
+      const precursorBridgeFragmentShader = /* glsl */ `
+        precision highp float;
+        uniform float uTime;
+        uniform float uStrength;
+        varying vec2 vUv;
+
+        void main() {
+          float x = (vUv.x - 0.5) * 2.0;
+          float y = vUv.y * 2.0 - 1.0;
+          float mid = 1.0 - abs(y);
+          float throat = exp(-x * x * (18.0 + 8.0 * mid));
+          float sheet = exp(-pow(abs(x) / max(0.08, 0.20 + 0.22 * abs(y)), 1.7));
+          float shear = 0.5 + 0.5 * sin(vUv.y * 36.0 - uTime * 2.6 + sin(vUv.x * 10.0 + uTime * 0.35));
+          float shearRim = smoothstep(0.35, 0.95, shear) * exp(-x * x * 3.8) * mid;
+          float alpha = (0.82 * throat + 0.55 * sheet + 0.46 * shearRim) * uStrength * (0.55 + 0.45 * mid);
+          alpha *= smoothstep(0.0, 0.07, mid);
+          vec3 colCore = vec3(0.90, 0.94, 1.30);
+          vec3 colRim = vec3(0.46, 0.70, 1.18);
+          vec3 col = mix(colRim, colCore, clamp(0.65 * throat + 0.25 * shearRim, 0.0, 1.0));
+          gl_FragColor = vec4(col * alpha * 1.62, alpha);
+        }
+      `;
+
+      const precursorBridge = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.0, 1.0, 1.0, 48, 1, true),
+        new THREE.ShaderMaterial({
+          uniforms: {
+            uTime: { value: 0.0 },
+            uStrength: { value: 0.0 },
+          },
+          vertexShader: precursorBridgeVertexShader,
+          fragmentShader: precursorBridgeFragmentShader,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        })
+      );
+      precursorBridge.visible = false;
+      precursorBridge.frustumCulled = false;
+      scene.add(precursorBridge);
+
+      const remnant = new THREE.Mesh(
+        new THREE.SphereGeometry(0.34, 48, 48),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.92, 1.0), transparent: true, opacity: 0.95 })
+      );
+      remnant.visible = false;
+      scene.add(remnant);
+
+      const pointSpriteVertexShader = /* glsl */ `
+        precision highp float;
+        attribute float aSize;
+        attribute float aPhase;
+        varying vec3 vColor;
+        varying float vPhase;
+        uniform float uBaseSize;
+        uniform float uScale;
+        uniform float uTime;
+
+        void main() {
+          vColor = color;
+          vPhase = aPhase;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          float dist = max(1.0, -mv.z);
+          float twinkle = 0.86 + 0.14 * sin(uTime * 0.9 + aPhase);
+          gl_PointSize = uBaseSize * aSize * uScale * twinkle / dist;
+          gl_Position = projectionMatrix * mv;
+        }
+      `;
+
+      const pointSpriteFragmentShader = /* glsl */ `
+        precision highp float;
+        varying vec3 vColor;
+        varying float vPhase;
+        uniform float uOpacity;
+        uniform float uSoftness;
+        uniform float uCoreBoost;
+        uniform float uTime;
+
+        void main() {
+          vec2 uv = gl_PointCoord * 2.0 - 1.0;
+          float r2 = dot(uv, uv);
+          if (r2 > 1.0) {
+            discard;
+          }
+
+          float halo = exp(-r2 * (2.4 + uSoftness * 0.9));
+          float core = exp(-r2 * (8.5 + uSoftness * 1.8)) * uCoreBoost;
+          float scint = 0.90 + 0.10 * sin(uTime * 2.2 + vPhase * 1.7);
+          float alpha = (halo + core) * uOpacity * scint;
+          gl_FragColor = vec4(vColor * (halo * 0.7 + core * 1.35), alpha);
+        }
+      `;
+
+      const starfieldVertexShader = /* glsl */ `
+        precision highp float;
+        attribute float aSize;
+        attribute float aPhase;
+        attribute float aLum;
+        varying vec3 vColor;
+        varying float vPhase;
+        varying float vLum;
+        uniform float uBaseSize;
+        uniform float uScale;
+        uniform float uTime;
+
+        void main() {
+          vColor = color;
+          vPhase = aPhase;
+          vLum = aLum;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          float dist = max(1.0, -mv.z);
+          // No atmospheric twinkle in space; only a very subtle sensor-like scintillation.
+          float scint = 1.0 + 0.018 * aLum * sin(uTime * 0.12 + aPhase * 1.37);
+          gl_PointSize = uBaseSize * aSize * uScale * scint / dist;
+          gl_Position = projectionMatrix * mv;
+        }
+      `;
+
+      const starfieldFragmentShader = /* glsl */ `
+        precision highp float;
+        varying vec3 vColor;
+        varying float vPhase;
+        varying float vLum;
+        uniform float uOpacity;
+        uniform float uSoftness;
+        uniform float uCoreBoost;
+        uniform float uTime;
+
+        void main() {
+          vec2 uv = gl_PointCoord * 2.0 - 1.0;
+          float r2 = dot(uv, uv);
+          if (r2 > 1.0) {
+            discard;
+          }
+
+          float r = sqrt(r2);
+          float core = exp(-r2 * (10.0 + uSoftness * 2.4 + 2.5 * vLum)) * (uCoreBoost + 0.45 * vLum);
+          float halo = exp(-r2 * (2.2 + uSoftness * 0.95));
+          float airy = exp(-pow(r - 0.52, 2.0) * 92.0) * (0.06 + 0.12 * vLum);
+          float spikeX = exp(-abs(uv.y) * 20.0) * exp(-abs(uv.x) * 1.65);
+          float spikeY = exp(-abs(uv.x) * 20.0) * exp(-abs(uv.y) * 1.65);
+          float spikes = (spikeX + spikeY) * smoothstep(0.72, 1.18, vLum) * 0.34;
+
+          float flicker = 1.0 + 0.02 * vLum * sin(uTime * 0.27 + vPhase * 1.1 + r * 9.0);
+          float alpha = (0.58 * halo + 1.08 * core + airy + spikes) * uOpacity * flicker;
+          vec3 col = vColor * (0.52 * halo + 1.30 * core + 0.72 * airy + 0.88 * spikes);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `;
+
+      const burstCount = 2600;
+      const burstPositions = new Float32Array(burstCount * 3);
+      const burstVel = new Float32Array(burstCount * 3);
+      const burstColor = new Float32Array(burstCount * 3);
+      const burstSize = new Float32Array(burstCount);
+      const burstPhase = new Float32Array(burstCount);
+      const burstGeom = new THREE.BufferGeometry();
+      burstGeom.setAttribute("position", new THREE.BufferAttribute(burstPositions, 3));
+      burstGeom.setAttribute("color", new THREE.BufferAttribute(burstColor, 3));
+      burstGeom.setAttribute("aSize", new THREE.BufferAttribute(burstSize, 1));
+      burstGeom.setAttribute("aPhase", new THREE.BufferAttribute(burstPhase, 1));
+      const burstMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0.0 },
+          uOpacity: { value: 0.0 },
+          uBaseSize: { value: 42.0 },
+          uScale: { value: Math.min(window.devicePixelRatio, 2.0) },
+          uSoftness: { value: 1.15 },
+          uCoreBoost: { value: 1.25 },
+        },
+        vertexShader: pointSpriteVertexShader,
+        fragmentShader: pointSpriteFragmentShader,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        vertexColors: true,
+      });
+      const burstPoints = new THREE.Points(burstGeom, burstMat);
+      burstPoints.visible = false;
+      burstPoints.frustumCulled = false;
+      scene.add(burstPoints);
+
+      function initBurstDirections() {
+        for (let i = 0; i < burstCount; i++) {
+          const i3 = i * 3;
+          const theta = 2.0 * Math.PI * Math.random();
+          const mixComp = Math.random();
+          let dir = new THREE.Vector3();
+          let speed = 0.0;
+          let r = 1.0;
+          let g = 1.0;
+          let b = 1.0;
+
+          if (mixComp < 0.52) {
+            // Equatorial tidal ejecta: slower and warmer.
+            const z = (Math.random() * 2.0 - 1.0) * 0.24;
+            const rr = Math.sqrt(Math.max(0.0, 1.0 - z * z));
+            dir.set(rr * Math.cos(theta), rr * Math.sin(theta), z).normalize();
+            speed = 2.3 + Math.random() * 6.6 + Math.pow(Math.random(), 2.2) * 6.0;
+            r = 0.98;
+            g = 0.74 + Math.random() * 0.14;
+            b = 0.95;
+          } else if (mixComp < 0.84) {
+            // Polar component: faster, lanthanide-poor, bluer.
+            const polarSign = Math.random() < 0.5 ? -1.0 : 1.0;
+            const z = polarSign * (0.70 + Math.random() * 0.30);
+            const rr = Math.sqrt(Math.max(0.0, 1.0 - z * z));
+            dir.set(rr * Math.cos(theta), rr * Math.sin(theta), z).normalize();
+            speed = 5.2 + Math.random() * 10.5 + Math.pow(Math.random(), 2.7) * 10.0;
+            r = 0.72;
+            g = 0.90 + Math.random() * 0.10;
+            b = 1.00;
+          } else {
+            // Quasi-isotropic hot flash debris.
+            const u = Math.random();
+            const v = Math.random();
+            const phi = Math.acos(2.0 * v - 1.0);
+            dir.set(Math.sin(phi) * Math.cos(theta), Math.sin(phi) * Math.sin(theta), Math.cos(phi));
+            speed = 4.0 + Math.random() * 12.0 + Math.pow(Math.random(), 3.0) * 14.0;
+            r = 0.90 + Math.random() * 0.10;
+            g = 0.78 + Math.random() * 0.16;
+            b = 1.00;
+          }
+
+          burstVel[i3 + 0] = dir.x * speed;
+          burstVel[i3 + 1] = dir.y * speed;
+          burstVel[i3 + 2] = dir.z * speed;
+
+          burstColor[i3 + 0] = r;
+          burstColor[i3 + 1] = g;
+          burstColor[i3 + 2] = b;
+          burstSize[i] = 0.55 + Math.pow(Math.random(), 2.0) * 1.55;
+          burstPhase[i] = Math.random() * Math.PI * 2.0;
+
+          burstPositions[i3 + 0] = 0;
+          burstPositions[i3 + 1] = 0;
+          burstPositions[i3 + 2] = 0;
+        }
+        burstGeom.attributes.position.needsUpdate = true;
+      }
+      initBurstDirections();
+
+      const starfieldCount = 4600;
+      const starfieldPositions = new Float32Array(starfieldCount * 3);
+      const starfieldColor = new Float32Array(starfieldCount * 3);
+      const starfieldSize = new Float32Array(starfieldCount);
+      const starfieldPhase = new Float32Array(starfieldCount);
+      const starfieldLum = new Float32Array(starfieldCount);
+
+      function kelvinToRGBJS(tempK) {
+        const t = Math.max(1200.0, Math.min(40000.0, tempK)) / 100.0;
+        let r = 1.0;
+        let g = 1.0;
+        let b = 1.0;
+
+        if (t <= 66.0) {
+          r = 1.0;
+          g = Math.max(0.0, Math.min(1.0, 0.39008158 * Math.log(Math.max(t, 1e-3)) - 0.63184144));
+        } else {
+          const tt = t - 60.0;
+          r = Math.max(0.0, Math.min(1.0, 1.29293619 * Math.pow(tt, -0.13320476)));
+          g = Math.max(0.0, Math.min(1.0, 1.12989086 * Math.pow(tt, -0.07551485)));
+        }
+
+        if (t >= 66.0) {
+          b = 1.0;
+        } else if (t <= 19.0) {
+          b = 0.0;
+        } else {
+          b = Math.max(0.0, Math.min(1.0, 0.54320679 * Math.log(t - 10.0) - 1.19625409));
+        }
+
+        return [r, g, b];
+      }
+
+      function sampleStellarTemperature() {
+        const u = Math.random();
+        if (u < 0.76) {
+          return 2600 + Math.random() * 1800; // M dwarfs (dominant in number)
+        }
+        if (u < 0.88) {
+          return 3900 + Math.random() * 1200; // K
+        }
+        if (u < 0.95) {
+          return 5200 + Math.random() * 900; // G
+        }
+        if (u < 0.985) {
+          return 6100 + Math.random() * 1600; // F
+        }
+        if (u < 0.997) {
+          return 7600 + Math.random() * 2600; // A
+        }
+        if (u < 0.9995) {
+          return 11000 + Math.random() * 8000; // B
+        }
+        return 22000 + Math.random() * 14000; // O (very rare)
+      }
+
+      function randNormal() {
+        const u1 = Math.max(1e-6, Math.random());
+        const u2 = Math.random();
+        return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      }
+
+      const galPole = new THREE.Vector3(0.24, 0.94, 0.24).normalize();
+      const galRef = Math.abs(galPole.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const galU = new THREE.Vector3().crossVectors(galRef, galPole).normalize();
+      const galV = new THREE.Vector3().crossVectors(galPole, galU).normalize();
+
+      const GOLDEN_FRAC = 0.6180339887498949;
+      for (let i = 0; i < starfieldCount; i++) {
+        const i3 = i * 3;
+        // Mild Milky-Way anisotropy, but with near-even sky coverage.
+        const inDisk = Math.random() < 0.62;
+        let dx;
+        let dy;
+        let dz;
+        if (inDisk) {
+          const frac = i * GOLDEN_FRAC - Math.floor(i * GOLDEN_FRAC);
+          const lon = (frac + (Math.random() - 0.5) * 0.06 + 1.0) % 1.0 * Math.PI * 2.0;
+          const sigma = Math.random() < 0.78 ? 0.20 : 0.38;
+          let lat = randNormal() * sigma;
+          lat = Math.max(-1.12, Math.min(1.12, lat));
+          const cLat = Math.cos(lat);
+          const a = Math.cos(lon) * cLat;
+          const b = Math.sin(lon) * cLat;
+          const c = Math.sin(lat);
+          dx = galU.x * a + galV.x * b + galPole.x * c;
+          dy = galU.y * a + galV.y * b + galPole.y * c;
+          dz = galU.z * a + galV.z * b + galPole.z * c;
+        } else {
+          // Quasi-uniform spherical sequence to avoid visible clumping.
+          const seqU = (i + 0.5) / starfieldCount;
+          const z = 1.0 - 2.0 * seqU + (Math.random() - 0.5) * (1.4 / starfieldCount);
+          const theta = Math.PI * 2.0 * ((i * GOLDEN_FRAC + 0.37) % 1.0);
+          const rr = Math.sqrt(Math.max(0.0, 1.0 - z * z));
+          dx = rr * Math.cos(theta);
+          dy = rr * Math.sin(theta);
+          dz = z;
+        }
+
+        const dirLenInv = 1.0 / Math.max(1e-6, Math.hypot(dx, dy, dz));
+        dx *= dirLenInv;
+        dy *= dirLenInv;
+        dz *= dirLenInv;
+
+        const radius = inDisk ? 100.0 + Math.pow(Math.random(), 0.58) * 315.0 : 155.0 + Math.pow(Math.random(), 0.56) * 260.0;
+        starfieldPositions[i3 + 0] = dx * radius;
+        starfieldPositions[i3 + 1] = dy * radius;
+        starfieldPositions[i3 + 2] = dz * radius;
+
+        const tK = sampleStellarTemperature();
+        const rgb = kelvinToRGBJS(tK);
+        const planeAlign = Math.abs(dx * galPole.x + dy * galPole.y + dz * galPole.z);
+        const dust = inDisk ? (1.0 - Math.min(1.0, planeAlign / 0.45)) * (0.06 + 0.20 * Math.random()) : 0.0;
+
+        const rr = rgb[0] * (1.0 - 0.22 * dust) + 1.00 * (0.22 * dust);
+        const gg = rgb[1] * (1.0 - 0.22 * dust) + 0.72 * (0.22 * dust);
+        const bb = rgb[2] * (1.0 - 0.28 * dust) + 0.48 * (0.28 * dust);
+
+        const lum = Math.min(1.25, 0.08 + 0.72 * Math.pow(Math.random(), 3.3) + 0.62 * Math.pow(Math.random(), 19.0));
+        const colorGain = 0.64 + 0.64 * Math.pow(lum, 0.74);
+        starfieldColor[i3 + 0] = rr * colorGain;
+        starfieldColor[i3 + 1] = gg * colorGain;
+        starfieldColor[i3 + 2] = bb * colorGain;
+        starfieldLum[i] = lum;
+        starfieldSize[i] = 0.46 + lum * (0.86 + 0.72 * Math.pow(Math.random(), 1.7));
+        starfieldPhase[i] = Math.random() * Math.PI * 2.0;
+      }
+      const starfieldGeom = new THREE.BufferGeometry();
+      starfieldGeom.setAttribute("position", new THREE.BufferAttribute(starfieldPositions, 3));
+      starfieldGeom.setAttribute("color", new THREE.BufferAttribute(starfieldColor, 3));
+      starfieldGeom.setAttribute("aSize", new THREE.BufferAttribute(starfieldSize, 1));
+      starfieldGeom.setAttribute("aPhase", new THREE.BufferAttribute(starfieldPhase, 1));
+      starfieldGeom.setAttribute("aLum", new THREE.BufferAttribute(starfieldLum, 1));
+      const starfieldMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0.0 },
+          uOpacity: { value: 0.95 },
+          uBaseSize: { value: 40.0 },
+          uScale: { value: Math.min(window.devicePixelRatio, 2.0) },
+          uSoftness: { value: 1.28 },
+          uCoreBoost: { value: 1.20 },
+        },
+        vertexShader: starfieldVertexShader,
+        fragmentShader: starfieldFragmentShader,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true,
+      });
+      const starfield = new THREE.Points(starfieldGeom, starfieldMat);
+      scene.add(starfield);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+      scene.add(ambient);
+
+      const ACT1_DURATION = 18.0;
+      const ACT2_DURATION = 1.0;
+      const ACT3_DURATION = 44.0;
+      const TOTAL_DURATION = ACT1_DURATION + ACT2_DURATION + ACT3_DURATION;
+
+      const params = {
+        timeScale: 2.0,
+        m1: 1.50,
+        m2: 1.38,
+        separationScale: 1.40,
+        ejectaMass: 0.074,
+        polarVel: 0.34,
+        eqVel: 0.118,
+        opacityContrast: 1.56,
+        rtStrength: 1.64,
+        jetAngle: 10.8,
+        jetIntensity: 2.35,
+        remnantLum: 1.58,
+        bloomStrength: 1.62,
+        chromaticAberration: 0.12,
+        sharpen: 0.72,
+        autoQuality: false,
+        qualityTier: 1,
+      };
+
+      const state = {
+        playing: true,
+        simTime: 0,
+        act: 1,
+        actTime: 0,
+        act2Progress: 0,
+        act3Progress: 0,
+        remnantFade: 0.0,
+        physicalDays: 0.03,
+        collisionElapsed: 0,
+        fpsSmooth: 60,
+        adaptTimer: 0,
+        currentQualityTier: 0,
+        exposureSmooth: 1.0,
+        cameraMotion: 0,
+        forceHistoryReset: true,
+        prevAct: 1,
+      };
+
+      const tmpDir12 = new THREE.Vector3();
+      const tmpDir21 = new THREE.Vector3();
+      const tmpProj1 = new THREE.Vector3();
+      const tmpProj2 = new THREE.Vector3();
+      const origin = new THREE.Vector3(0, 0, 0);
+      const tmpAxisPlus = new THREE.Vector3();
+      const tmpAxisMinus = new THREE.Vector3();
+      const tmpOriginProj = new THREE.Vector3();
+      const tmpToCam = new THREE.Vector3();
+      const tmpBridgeDir = new THREE.Vector3();
+      const tmpBridgeMid = new THREE.Vector3();
+      const bridgeUp = new THREE.Vector3(0, 1, 0);
+      const tmpVel1 = new THREE.Vector3();
+      const tmpVel2 = new THREE.Vector3();
+      const tmpView1 = new THREE.Vector3();
+      const tmpView2 = new THREE.Vector3();
+      const tmpShear1 = new THREE.Vector3();
+      const tmpShear2 = new THREE.Vector3();
+      const prevCamPos = camera.position.clone();
+      const prevCamQuat = camera.quaternion.clone();
+
+      const qualityProfiles = [
+        { name: "Ultra", steps: 140, octaves: 5, pixelRatio: Math.min(window.devicePixelRatio, 2.0), volumeScale: volumeScaleByTier[0] },
+        { name: "High", steps: 118, octaves: 4, pixelRatio: Math.min(window.devicePixelRatio, 1.8), volumeScale: volumeScaleByTier[1] },
+        { name: "Medium", steps: 92, octaves: 3, pixelRatio: Math.min(window.devicePixelRatio, 1.4), volumeScale: volumeScaleByTier[2] },
+        { name: "Low", steps: 70, octaves: 2, pixelRatio: Math.min(window.devicePixelRatio, 1.1), volumeScale: volumeScaleByTier[3] },
+      ];
+
+      function smoothstep(edge0, edge1, x) {
+        const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+        return t * t * (3 - 2 * t);
+      }
+
+      function clamp(x, a, b) {
+        return Math.min(Math.max(x, a), b);
+      }
+
+      function mapExp01(x, minVal, maxVal) {
+        const logMin = Math.log(minVal);
+        const logMax = Math.log(maxVal);
+        return Math.exp(logMin + (logMax - logMin) * x);
+      }
+
+      function inspiralPhasePN(p, eta, massScale, chirpScale) {
+        const pp = clamp(p, 0, 1);
+        const tau = Math.max(0.028, 1.0 - pp);
+        const xPN = 0.165 * Math.pow(tau, -0.25);
+        const c1 = 743.0 / 336.0 + (11.0 * eta) / 4.0;
+        const c15 = -4.0 * Math.PI;
+        const c2 = 34103.0 / 18144.0 + (13661.0 * eta) / 2016.0 + (59.0 * eta * eta) / 18.0;
+        const phaseBaseCycles = (2.0 * pp + 5.6 * pp * pp + 18.0 * Math.pow(pp, 4.0)) * massScale;
+        const pnFactor =
+          1.0 +
+          0.045 * c1 * xPN +
+          0.0085 * c15 * Math.pow(xPN, 1.5) +
+          0.0022 * c2 * xPN * xPN;
+        return 2.0 * Math.PI * phaseBaseCycles * clamp(pnFactor, 0.55, 2.6) * Math.pow(chirpScale, 0.10);
+      }
+
+      function loveNumberFromMass(massMsun) {
+        // Lower-mass neutron stars are generally less compact and more deformable.
+        return clamp(0.145 - 0.052 * ((massMsun - 1.2) / 1.8), 0.055, 0.155);
+      }
+
+      function setQualityTier(tier, force = false) {
+        const next = clamp(Math.round(tier), 0, qualityProfiles.length - 1);
+        if (!force && next === state.currentQualityTier) {
+          return;
+        }
+
+        state.currentQualityTier = next;
+        params.qualityTier = next;
+        const profile = qualityProfiles[next];
+        renderer.setPixelRatio(profile.pixelRatio);
+        currentVolumeScale = profile.volumeScale;
+        onResize();
+
+        volumeMaterial.uniforms.uSteps.value = Number(profile.steps);
+        volumeMaterial.uniforms.uNoiseOctaves.value = Number(profile.octaves);
+        state.forceHistoryReset = true;
+
+        const qEl = document.getElementById("qualityTier");
+        qEl.value = String(next);
+        document.getElementById("qualityTierValue").textContent = `${next} (${profile.name})`;
+      }
+
+      function bindSlider(id, key, formatter) {
+        const el = document.getElementById(id);
+        const valueEl = document.getElementById(`${id}Value`);
+        el.value = String(params[key]);
+        valueEl.textContent = formatter(params[key]);
+        el.addEventListener("input", () => {
+          params[key] = parseFloat(el.value);
+          valueEl.textContent = formatter(params[key]);
+        });
+      }
+
+      bindSlider("m1", "m1", (v) => v.toFixed(2));
+      bindSlider("m2", "m2", (v) => v.toFixed(2));
+      bindSlider("separationScale", "separationScale", (v) => `${v.toFixed(2)}x`);
+      bindSlider("ejectaMass", "ejectaMass", (v) => v.toFixed(3));
+      bindSlider("polarVel", "polarVel", (v) => v.toFixed(3));
+      bindSlider("eqVel", "eqVel", (v) => v.toFixed(3));
+      bindSlider("opacityContrast", "opacityContrast", (v) => v.toFixed(2));
+      bindSlider("rtStrength", "rtStrength", (v) => v.toFixed(2));
+      bindSlider("jetAngle", "jetAngle", (v) => `${v.toFixed(1)} deg`);
+      bindSlider("jetIntensity", "jetIntensity", (v) => v.toFixed(2));
+      bindSlider("remnantLum", "remnantLum", (v) => v.toFixed(2));
+      bindSlider("bloomStrength", "bloomStrength", (v) => v.toFixed(2));
+      bindSlider("chromaticAberration", "chromaticAberration", (v) => v.toFixed(2));
+      bindSlider("sharpen", "sharpen", (v) => v.toFixed(2));
+
+      const timelineEl = document.getElementById("timeline");
+      const timelineValueEl = document.getElementById("timelineValue");
+      const timeScaleEl = document.getElementById("timeScale");
+      const timeScaleValueEl = document.getElementById("timeScaleValue");
+      const uiPanel = document.getElementById("ui");
+      const settingsToggleBtn = document.getElementById("settingsToggle");
+      const hudAct = document.getElementById("hudAct");
+      const hudSim = document.getElementById("hudSim");
+      const hudPhys = document.getElementById("hudPhys");
+      const hudFPS = document.getElementById("hudFPS");
+      const hudQuality = document.getElementById("hudQuality");
+      const hudSteps = document.getElementById("hudSteps");
+
+      let panelCollapsed = false;
+
+      function setPanelCollapsed(collapsed) {
+        panelCollapsed = collapsed;
+        uiPanel.classList.toggle("collapsed", collapsed);
+        settingsToggleBtn.textContent = collapsed ? "Settings ⚙" : "Hide Settings ⚙";
+        settingsToggleBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      }
+
+      settingsToggleBtn.addEventListener("click", () => {
+        setPanelCollapsed(!panelCollapsed);
+      });
+      setPanelCollapsed(false);
+
+      timeScaleEl.value = String(params.timeScale);
+      timeScaleValueEl.textContent = `${params.timeScale.toFixed(2)}x`;
+      timeScaleEl.addEventListener("input", () => {
+        params.timeScale = parseFloat(timeScaleEl.value);
+        timeScaleValueEl.textContent = `${params.timeScale.toFixed(2)}x`;
+      });
+
+      timelineEl.addEventListener("input", () => {
+        state.simTime = (parseFloat(timelineEl.value) / 1000) * TOTAL_DURATION;
+        state.exposureSmooth = 1.0;
+        state.forceHistoryReset = true;
+      });
+
+      const playPauseBtn = document.getElementById("playPause");
+      const restartBtn = document.getElementById("restart");
+
+      playPauseBtn.addEventListener("click", () => {
+        state.playing = !state.playing;
+        playPauseBtn.textContent = state.playing ? "Pause" : "Play";
+      });
+
+      restartBtn.addEventListener("click", () => {
+        state.simTime = 0;
+        state.playing = true;
+        state.exposureSmooth = 1.0;
+        state.forceHistoryReset = true;
+        playPauseBtn.textContent = "Pause";
+      });
+
+      const autoQualityEl = document.getElementById("autoQuality");
+      const autoQualityValueEl = document.getElementById("autoQualityValue");
+      const manualQualityEl = document.getElementById("qualityTier");
+
+      function refreshQualityControls() {
+        manualQualityEl.disabled = params.autoQuality;
+      }
+
+      autoQualityEl.checked = params.autoQuality;
+      autoQualityValueEl.textContent = params.autoQuality ? "On" : "Off";
+      autoQualityEl.addEventListener("change", () => {
+        params.autoQuality = autoQualityEl.checked;
+        autoQualityValueEl.textContent = params.autoQuality ? "On" : "Off";
+        refreshQualityControls();
+        if (!params.autoQuality) {
+          setQualityTier(parseInt(manualQualityEl.value, 10), true);
+        }
+      });
+
+      manualQualityEl.value = String(params.qualityTier);
+      manualQualityEl.addEventListener("input", () => {
+        const tier = parseInt(manualQualityEl.value, 10);
+        if (!params.autoQuality) {
+          setQualityTier(tier, true);
+        }
+      });
+      refreshQualityControls();
+
+      function setDefaultCameraView() {
+        camera.position.set(31.0, 6.2, 0.0);
+        controls.target.set(0, 0, 0);
+        controls.update();
+        state.forceHistoryReset = true;
+      }
+
+      function updateBurst(collisionTime, totalMassScale) {
+        const fade = Math.exp(-collisionTime * 0.6);
+        const opacity = clamp(1.45 * fade, 0, 1.0);
+        burstMat.uniforms.uOpacity.value = opacity;
+        burstPoints.visible = opacity > 0.01;
+
+        for (let i = 0; i < burstCount; i++) {
+          const i3 = i * 3;
+          const vx = burstVel[i3 + 0] * totalMassScale;
+          const vy = burstVel[i3 + 1] * totalMassScale;
+          const vz = burstVel[i3 + 2] * totalMassScale;
+
+          const drag = 1.0 / (1.0 + collisionTime * 0.15);
+          burstPositions[i3 + 0] = vx * collisionTime * drag;
+          burstPositions[i3 + 1] = vy * collisionTime * drag;
+          burstPositions[i3 + 2] = vz * collisionTime * drag;
+        }
+        burstGeom.attributes.position.needsUpdate = true;
+      }
+
+      function updateInspiral(elapsed, actTime) {
+        const p = clamp(actTime / ACT1_DURATION, 0, 1);
+        const m1 = params.m1;
+        const m2 = params.m2;
+        const mTotal = m1 + m2;
+        const eta = (m1 * m2) / (mTotal * mTotal);
+        const chirpMass = Math.pow(m1 * m2, 3.0 / 5.0) / Math.pow(mTotal, 1.0 / 5.0);
+        const chirpScale = clamp(chirpMass / 1.22, 0.72, 1.5);
+        const mScale = clamp(mTotal / 2.8, 0.72, 1.7);
+
+        const phase = inspiralPhasePN(p, eta, mScale, chirpScale);
+        const dp = 0.0015;
+        const phasePrev = inspiralPhasePN(clamp(p - dp, 0, 1), eta, mScale, chirpScale);
+        const phaseNext = inspiralPhasePN(clamp(p + dp, 0, 1), eta, mScale, chirpScale);
+        const omega = Math.max(0.03, (phaseNext - phasePrev) / (2.0 * dp * ACT1_DURATION));
+        const chirpBoost = Math.pow(Math.max(0.04, 1.0 - 0.965 * p), -0.39);
+
+        const sepScale = clamp(params.separationScale, 0.75, 1.40);
+        const sepBase = clamp((7.8 - 6.0 * Math.pow(p, 0.76)) * sepScale, 2.08 * sepScale, 8.0 * sepScale);
+        const gmEff = (265.0 + 42.0 * eta) * mScale;
+        const sepKepler = Math.cbrt((gmEff * sepScale) / (omega * omega + 1e-4));
+        const sepMix = 0.28 + 0.56 * smoothstep(0.38, 1.0, p);
+        const sep = clamp(sepBase * (1.0 - sepMix) + sepKepler * sepMix, 2.02 * sepScale, 8.6 * sepScale);
+        const r1 = sep * (m2 / mTotal);
+        const r2 = sep * (m1 / mTotal);
+
+        const c = Math.cos(phase);
+        const s = Math.sin(phase);
+        const zOsc = 0.07 * Math.sin(phase * 0.55);
+        const zVel = 0.07 * 0.55 * Math.cos(phase * 0.55) * omega;
+        star1.position.set(c * r1, s * r1, zOsc);
+        star2.position.set(-c * r2, -s * r2, -zOsc);
+        star1.scale.setScalar(1);
+        star2.scale.setScalar(1);
+
+        const tidalProxy = Math.pow(clamp(2.15 / Math.max(sep, 1e-4), 0.0, 1.35), 3.0);
+        const k2_1 = loveNumberFromMass(m1);
+        const k2_2 = loveNumberFromMass(m2);
+        const tidalRamp = 0.55 + 0.45 * smoothstep(0.50, 1.0, p);
+        const tidal1 = clamp(5.1 * k2_1 * (m2 / m1) * tidalProxy * tidalRamp, 0.0, 0.98);
+        const tidal2 = clamp(5.1 * k2_2 * (m1 / m2) * tidalProxy * tidalRamp, 0.0, 0.98);
+        const tidalMean = 0.5 * (tidal1 + tidal2);
+        const barMode = clamp(Math.pow(smoothstep(0.58, 1.0, p), 1.15) * (0.20 + 0.80 * tidalMean), 0.0, 1.0);
+        const orbitalShear = clamp(omega * sep * 0.082, 0.0, 2.6);
+        const shearTurnOn = smoothstep(0.55, 1.0, p) * smoothstep(0.35, 1.35, orbitalShear);
+        const tidalHeat1 = clamp((0.28 + 0.72 * tidal1) * (0.42 + 0.58 * shearTurnOn), 0.0, 1.0);
+        const tidalHeat2 = clamp((0.28 + 0.72 * tidal2) * (0.42 + 0.58 * shearTurnOn), 0.0, 1.0);
+        tmpDir12.subVectors(star2.position, star1.position).normalize();
+        tmpDir21.copy(tmpDir12).multiplyScalar(-1);
+
+        starMat1.uniforms.uDeform.value = tidal1;
+        starMat2.uniforms.uDeform.value = tidal2;
+        starMat1.uniforms.uDeformDir.value.copy(tmpDir12);
+        starMat2.uniforms.uDeformDir.value.copy(tmpDir21);
+        starMat1.uniforms.uCompanionDir.value.copy(tmpDir12);
+        starMat2.uniforms.uCompanionDir.value.copy(tmpDir21);
+        starMat1.uniforms.uBarMode.value = barMode;
+        starMat2.uniforms.uBarMode.value = barMode * 0.97;
+        starMat1.uniforms.uTidalHeat.value = tidalHeat1;
+        starMat2.uniforms.uTidalHeat.value = tidalHeat2;
+
+        tmpVel1.set(-s * r1 * omega, c * r1 * omega, zVel);
+        tmpVel2.set(s * r2 * omega, -c * r2 * omega, -zVel);
+        tmpShear1.copy(tmpVel1);
+        if (tmpShear1.lengthSq() < 1e-8) {
+          tmpShear1.set(0, 1, 0);
+        } else {
+          tmpShear1.normalize();
+        }
+        tmpShear2.copy(tmpVel2);
+        if (tmpShear2.lengthSq() < 1e-8) {
+          tmpShear2.set(0, -1, 0);
+        } else {
+          tmpShear2.normalize();
+        }
+        starMat1.uniforms.uShearDir.value.copy(tmpShear1);
+        starMat2.uniforms.uShearDir.value.copy(tmpShear2);
+        starMat1.uniforms.uShearHeat.value = clamp(shearTurnOn * (0.48 + 0.52 * tidal1), 0.0, 1.0);
+        starMat2.uniforms.uShearHeat.value = clamp(shearTurnOn * (0.48 + 0.52 * tidal2), 0.0, 1.0);
+
+        tmpView1.copy(camera.position).sub(star1.position).normalize();
+        tmpView2.copy(camera.position).sub(star2.position).normalize();
+        const betaScale = 0.021 + 0.003 * smoothstep(0.35, 1.0, p);
+        const radialVel1 = clamp(tmpVel1.dot(tmpView1) * betaScale, -0.18, 0.18);
+        const radialVel2 = clamp(tmpVel2.dot(tmpView2) * betaScale, -0.18, 0.18);
+        starMat1.uniforms.uRadialVel.value = radialVel1;
+        starMat2.uniforms.uRadialVel.value = radialVel2;
+
+        const temp = clamp(0.27 + 0.60 * smoothstep(0.12, 1.0, p) + 0.10 * shearTurnOn, 0.0, 1.0);
+        const intensity = 0.94 + 0.58 * smoothstep(0.2, 1.0, p) + 0.06 * chirpBoost + 0.12 * shearTurnOn;
+        starMat1.uniforms.uTemp.value = temp;
+        starMat2.uniforms.uTemp.value = temp * 0.96;
+        starMat1.uniforms.uIntensity.value = intensity;
+        starMat2.uniforms.uIntensity.value = intensity * 0.98;
+        starMat1.uniforms.uTime.value = elapsed;
+        starMat2.uniforms.uTime.value = elapsed + 0.35;
+        starMat1.uniforms.uCamPos.value.copy(camera.position);
+        starMat2.uniforms.uCamPos.value.copy(camera.position);
+
+        star1.visible = true;
+        star2.visible = true;
+        remnant.visible = false;
+        state.remnantFade = 0.0;
+
+        const bridgeStrength = clamp(Math.pow(smoothstep(0.70, 1.0, p), 1.38) * (0.25 + 0.75 * tidalMean), 0.0, 1.0);
+        if (bridgeStrength > 0.01) {
+          tmpBridgeDir.subVectors(star2.position, star1.position);
+          const bridgeLen = tmpBridgeDir.length();
+          if (bridgeLen > 1e-4) {
+            tmpBridgeMid.copy(star1.position).add(star2.position).multiplyScalar(0.5);
+            precursorBridge.position.copy(tmpBridgeMid);
+            tmpBridgeDir.multiplyScalar(1.0 / bridgeLen);
+            precursorBridge.quaternion.setFromUnitVectors(bridgeUp, tmpBridgeDir);
+            const bridgeRadius = (0.068 + 0.102 * bridgeStrength) * (0.92 + 0.20 * eta);
+            precursorBridge.scale.set(bridgeRadius, bridgeLen * 0.97, bridgeRadius);
+            precursorBridge.visible = true;
+            precursorBridge.material.uniforms.uTime.value = elapsed;
+            precursorBridge.material.uniforms.uStrength.value = bridgeStrength;
+          } else {
+            precursorBridge.visible = false;
+          }
+        } else {
+          precursorBridge.visible = false;
+        }
+
+        burstMat.uniforms.uOpacity.value = 0.0;
+        burstPoints.visible = false;
+      }
+
+      function updateCollision(elapsed, actTime, massScale) {
+        const p = clamp(actTime / ACT2_DURATION, 0, 1);
+
+        star1.visible = p < 0.65;
+        star2.visible = p < 0.65;
+        precursorBridge.visible = false;
+
+        const collapse = 1.0 - smoothstep(0.0, 1.0, p);
+        star1.scale.setScalar(0.6 + 0.4 * collapse);
+        star2.scale.setScalar(0.6 + 0.4 * collapse);
+
+        star1.position.lerp(origin, 0.14 + p * 0.2);
+        star2.position.lerp(origin, 0.14 + p * 0.2);
+
+        remnant.visible = true;
+        remnant.position.set(0, 0, 0);
+        const pulse = 1.0 + 0.25 * Math.sin(elapsed * 14.0);
+        const remnantFade = 1.0 - 0.35 * p;
+        remnant.scale.setScalar((0.85 + 0.55 * (1.0 - p)) * pulse);
+        remnant.material.opacity = 0.88 * remnantFade;
+        state.remnantFade = remnantFade;
+
+        updateBurst(actTime, massScale);
+      }
+
+      function updateExpansion(elapsed, actTime, massScale) {
+        const p = clamp(actTime / ACT3_DURATION, 0, 1);
+
+        star1.visible = false;
+        star2.visible = false;
+        precursorBridge.visible = false;
+
+        remnant.visible = false;
+        remnant.material.opacity = 0.0;
+        state.remnantFade = 0.0;
+
+        updateBurst(ACT2_DURATION + actTime, massScale);
+
+        state.act3Progress = p;
+        state.physicalDays = mapExp01(Math.pow(p, 1.15), 0.03, 21.0);
+      }
+
+      function updateTimeline(delta) {
+        if (state.playing) {
+          state.simTime += delta * params.timeScale;
+          while (state.simTime >= TOTAL_DURATION) {
+            state.simTime -= TOTAL_DURATION;
+          }
+          if (state.simTime < 0) {
+            state.simTime = 0;
+          }
+        }
+
+        timelineEl.value = String(Math.round((state.simTime / TOTAL_DURATION) * 1000));
+        timelineValueEl.textContent = `${state.simTime.toFixed(2)} s`;
+
+        if (state.simTime < ACT1_DURATION) {
+          state.act = 1;
+          state.actTime = state.simTime;
+          state.act2Progress = 0;
+          state.act3Progress = 0;
+          state.physicalDays = 0.03;
+        } else if (state.simTime < ACT1_DURATION + ACT2_DURATION) {
+          state.act = 2;
+          state.actTime = state.simTime - ACT1_DURATION;
+          state.act2Progress = clamp(state.actTime / ACT2_DURATION, 0, 1);
+          state.act3Progress = 0;
+          state.physicalDays = 0.03;
+        } else {
+          state.act = 3;
+          state.actTime = state.simTime - ACT1_DURATION - ACT2_DURATION;
+          state.act2Progress = 1.0;
+        }
+
+        if (state.act !== state.prevAct) {
+          state.forceHistoryReset = true;
+          state.prevAct = state.act;
+        }
+      }
+
+      function updatePerformance(delta) {
+        const fps = 1.0 / Math.max(delta, 1e-4);
+        state.fpsSmooth = THREE.MathUtils.lerp(state.fpsSmooth, fps, 0.06);
+
+        if (!params.autoQuality) {
+          return;
+        }
+
+        state.adaptTimer += delta;
+        if (state.adaptTimer < 1.2) {
+          return;
+        }
+
+        state.adaptTimer = 0;
+
+        if (state.fpsSmooth < 50 && state.currentQualityTier < qualityProfiles.length - 1) {
+          setQualityTier(state.currentQualityTier + 1, true);
+        } else if (state.fpsSmooth > 57 && state.currentQualityTier > 0) {
+          setQualityTier(state.currentQualityTier - 1, true);
+        }
+      }
+
+      function updateAct(elapsed) {
+        const totalMass = params.m1 + params.m2;
+        const massScale = clamp(Math.pow(totalMass / 2.8, 0.70), 0.70, 1.65);
+        const actLabel = state.act === 1 ? "Inspiral" : state.act === 2 ? "Collision" : "Kilonova Expansion";
+        const qualityProfile = qualityProfiles[state.currentQualityTier];
+
+        if (state.act === 1) {
+          updateInspiral(elapsed, state.actTime);
+        } else if (state.act === 2) {
+          updateCollision(elapsed, state.actTime, massScale);
+        } else {
+          updateExpansion(elapsed, state.actTime, massScale);
+        }
+
+        let tSinceMerger = -1.0;
+        if (state.act === 2) {
+          tSinceMerger = state.actTime;
+        } else if (state.act === 3) {
+          tSinceMerger = ACT2_DURATION + state.actTime;
+        }
+
+        tmpToCam.copy(camera.position).sub(origin).normalize();
+        const cosViewAxis = Math.abs(tmpToCam.z);
+        const jetOpen = THREE.MathUtils.degToRad(Math.max(3.0, params.jetAngle));
+        const directAngleWeight = smoothstep(Math.cos(jetOpen + THREE.MathUtils.degToRad(8.0)), Math.cos(jetOpen), cosViewAxis);
+
+        let grbDirect = 0.0;
+        let grbPrompt = 0.0;
+        let grbCocoon = 0.0;
+        let grbPromptKick = 0.0;
+        let grbShockR = 0.0;
+        let grbShockW = 0.04;
+        let grbAge = -1.0;
+        if (tSinceMerger >= 0.0) {
+          grbAge = tSinceMerger;
+          const promptAngle = Math.pow(directAngleWeight, 0.9);
+          const directRise = smoothstep(0.02, 0.14, tSinceMerger);
+          const directPeak = Math.exp(-Math.pow((tSinceMerger - 0.20) / 0.16, 2.0));
+          const directDecay = Math.exp(-Math.max(0.0, tSinceMerger - 0.18) / 0.48);
+          const promptTemporal = directRise * directDecay * (0.62 + 0.38 * directPeak);
+          grbDirect = promptTemporal * promptAngle * massScale * (1.20 + 0.18 * params.jetIntensity);
+
+          const promptSpikeRise = smoothstep(0.004, 0.045, tSinceMerger);
+          const promptSpikePeak = Math.exp(-Math.pow((tSinceMerger - 0.07) / 0.055, 2.0));
+          const promptSpikeTail = Math.exp(-Math.max(0.0, tSinceMerger - 0.06) / 0.18);
+          const promptSpike = promptSpikeRise * (0.68 * promptSpikePeak + 0.32 * promptSpikeTail);
+          grbPrompt = promptSpike * promptAngle * massScale * (1.22 + 0.20 * params.jetIntensity);
+
+          // Ultra-brief prompt saturation proxy (detector overwhelm near merger only).
+          const promptKickPeak = Math.exp(-Math.pow((tSinceMerger - 0.050) / 0.020, 2.0));
+          const promptKickGate = smoothstep(0.0, 0.030, tSinceMerger) * (1.0 - smoothstep(0.11, 0.22, tSinceMerger));
+          grbPromptKick = promptKickPeak * promptKickGate * promptAngle * massScale * (1.85 + 0.26 * params.jetIntensity);
+          grbPrompt += grbPromptKick;
+
+          const cocoonRise = smoothstep(0.05, 0.70, tSinceMerger);
+          const cocoonPlateau = 1.0 - smoothstep(3.4, 6.4, tSinceMerger);
+          const cocoonTail = Math.pow(1.0 + Math.max(0.0, tSinceMerger - 0.8) / 2.3, -1.08);
+          const cocoonTemporal = cocoonRise * (0.72 * cocoonPlateau + 0.58 * cocoonTail);
+          const cocoonAngleWeight = 0.52 + 0.48 * (1.0 - 0.65 * directAngleWeight);
+          const ejectaScale = clamp(params.ejectaMass / 0.074, 0.7, 1.55);
+          grbCocoon = cocoonTemporal * cocoonAngleWeight * massScale * ejectaScale * 0.86;
+
+          const shockFront = 0.24 * tSinceMerger / Math.pow(1.0 + tSinceMerger / 2.4, 0.42);
+          grbShockR = clamp(0.05 + shockFront, 0.05, 0.86);
+          grbShockW = clamp(0.016 + 0.010 * Math.sqrt(tSinceMerger + 0.02) + 0.030 * grbCocoon, 0.016, 0.095);
+        }
+        grbDirect = clamp(grbDirect, 0.0, 2.0);
+        grbPrompt = clamp(grbPrompt, 0.0, 3.2);
+        grbCocoon = clamp(grbCocoon, 0.0, 1.5);
+
+        const flash = state.act === 2 ? Math.exp(-state.act2Progress * 8.8) * (2.0 * massScale) : 0.0;
+        const promptOverwhelm = clamp(grbPromptKick * 0.70, 0.0, 1.8);
+        const exposureBase = 1.02 - flash * 0.15 + grbDirect * 0.06 + grbCocoon * 0.03;
+        const exposureMax = 1.16 + 0.08 * smoothstep(0.0, 0.9, grbPrompt) + 0.14 * promptOverwhelm;
+        const exposureTarget = clamp(exposureBase + grbPrompt * 0.10 + 0.12 * promptOverwhelm, 0.78, exposureMax);
+        state.exposureSmooth = THREE.MathUtils.lerp(state.exposureSmooth, exposureTarget, 0.08);
+        renderer.toneMappingExposure = state.exposureSmooth;
+
+        const volUniforms = volumeMaterial.uniforms;
+        const compUniforms = compositeMaterial.uniforms;
+        const tempUniforms = temporalMaterial.uniforms;
+
+        volUniforms.uCamPos.value.copy(camera.position);
+        volUniforms.uInvProj.value.copy(camera.projectionMatrixInverse);
+        volUniforms.uInvView.value.copy(camera.matrixWorld);
+        volUniforms.uTime.value = elapsed;
+        volUniforms.uAct.value = state.act;
+        volUniforms.uAct2Progress.value = state.act2Progress;
+        volUniforms.uAct3Progress.value = state.act3Progress;
+        volUniforms.uDays.value = state.physicalDays;
+        volUniforms.uCollisionFlash.value = flash;
+        volUniforms.uEnergyScale.value = massScale;
+        volUniforms.uEjectaMass.value = params.ejectaMass;
+        volUniforms.uPolarVel.value = params.polarVel;
+        volUniforms.uEqVel.value = params.eqVel;
+        volUniforms.uOpacityContrast.value = params.opacityContrast;
+        volUniforms.uRTStrength.value = params.rtStrength;
+        volUniforms.uJetAngle.value = params.jetAngle;
+        volUniforms.uJetIntensity.value = params.jetIntensity;
+        volUniforms.uRemnantLum.value = state.act === 2 ? params.remnantLum * state.remnantFade : 0.0;
+
+        const act2BloomScale = state.act === 2 ? (0.80 + 0.20 * state.act2Progress) : 1.0;
+        const promptBloomBoost = 1.0 + 0.48 * Math.min(1.8, grbPrompt) + 0.70 * promptOverwhelm;
+        compUniforms.uBloomStrength.value = params.bloomStrength * act2BloomScale * promptBloomBoost;
+        compUniforms.uAct.value = state.act;
+        compUniforms.uAct2Progress.value = state.act2Progress;
+        compUniforms.uChromAb.value = params.chromaticAberration;
+        compUniforms.uSharpen.value = params.sharpen;
+        compUniforms.uGRBDirect.value = grbDirect;
+        compUniforms.uGRBPrompt.value = grbPrompt;
+        compUniforms.uGRBCocoon.value = grbCocoon;
+        compUniforms.uGRBShockR.value = grbShockR;
+        compUniforms.uGRBShockW.value = grbShockW;
+        compUniforms.uGRBAge.value = grbAge;
+
+        tmpOriginProj.copy(origin).project(camera);
+        if (tmpOriginProj.z > -1.0 && tmpOriginProj.z < 1.0) {
+          compUniforms.uGRBCenter.value.set(tmpOriginProj.x * 0.5 + 0.5, tmpOriginProj.y * 0.5 + 0.5);
+        } else {
+          compUniforms.uGRBCenter.value.set(0.5, 0.5);
+        }
+
+        tmpAxisPlus.set(0, 0, 1).project(camera);
+        tmpAxisMinus.set(0, 0, -1).project(camera);
+        const ax = tmpAxisPlus.x - tmpAxisMinus.x;
+        const ay = tmpAxisPlus.y - tmpAxisMinus.y;
+        const alen = Math.hypot(ax, ay);
+        if (alen > 1e-5) {
+          compUniforms.uGRBAxisDir.value.set(ax / alen, ay / alen);
+        } else {
+          compUniforms.uGRBAxisDir.value.set(1.0, 0.0);
+        }
+
+        let stepScale = 1.0;
+        let noiseScale = 1.0;
+        if (state.act === 2) {
+          stepScale = 1.08 - 0.10 * state.act2Progress;
+          noiseScale = 0.94 + 0.12 * state.act2Progress;
+        } else if (state.act === 3) {
+          const earlyImpulse = Math.exp(-state.act3Progress * 5.8);
+          const lateRelax = smoothstep(0.18, 1.0, state.act3Progress);
+          stepScale = clamp(1.06 + 0.34 * earlyImpulse - 0.24 * lateRelax, 0.68, 1.36);
+          noiseScale = clamp(0.98 + 0.20 * earlyImpulse - 0.08 * lateRelax, 0.74, 1.28);
+        }
+        volUniforms.uStepScale.value = stepScale;
+        volUniforms.uNoiseScale.value = noiseScale;
+
+        let starVis1 = 0.0;
+        let starVis2 = 0.0;
+        if (star1.visible) {
+          tmpProj1.copy(star1.position).project(camera);
+          if (tmpProj1.z > -1.0 && tmpProj1.z < 1.0) {
+            compUniforms.uStarScreen1.value.set(tmpProj1.x * 0.5 + 0.5, tmpProj1.y * 0.5 + 0.5);
+            starVis1 = 1.0;
+          } else {
+            compUniforms.uStarScreen1.value.set(-10, -10);
+          }
+        } else {
+          compUniforms.uStarScreen1.value.set(-10, -10);
+        }
+        if (star2.visible) {
+          tmpProj2.copy(star2.position).project(camera);
+          if (tmpProj2.z > -1.0 && tmpProj2.z < 1.0) {
+            compUniforms.uStarScreen2.value.set(tmpProj2.x * 0.5 + 0.5, tmpProj2.y * 0.5 + 0.5);
+            starVis2 = 1.0;
+          } else {
+            compUniforms.uStarScreen2.value.set(-10, -10);
+          }
+        } else {
+          compUniforms.uStarScreen2.value.set(-10, -10);
+        }
+        compUniforms.uStarVis1.value = starVis1;
+        compUniforms.uStarVis2.value = starVis2;
+
+        let historyBlend = 0.0;
+        let historyReset = 1.0;
+        if (state.act >= 2) {
+          const motionSuppression = clamp(1.0 - state.cameraMotion * 18.0, 0.0, 1.0);
+          const phaseBlend =
+            state.act === 2 ? 0.52 + 0.18 * state.act2Progress : 0.62 + 0.24 * smoothstep(0.0, 0.55, state.act3Progress);
+          historyBlend = phaseBlend * motionSuppression;
+          historyReset = 0.0;
+        }
+        if (state.forceHistoryReset) {
+          historyBlend = 0.0;
+          historyReset = 1.0;
+          state.forceHistoryReset = false;
+        }
+        tempUniforms.uHistoryBlend.value = historyBlend;
+        tempUniforms.uHistoryReset.value = historyReset;
+        let temporalClamp = 0.54;
+        if (state.act === 2) {
+          temporalClamp = 0.74 - 0.22 * state.act2Progress;
+        } else if (state.act === 3) {
+          temporalClamp = 0.44 + 0.10 * Math.exp(-state.act3Progress * 2.6);
+        }
+        tempUniforms.uTemporalClamp.value = temporalClamp;
+        tempUniforms.tCurrent.value = volumeCurrentTarget.texture;
+        tempUniforms.tHistory.value = volumeHistoryRead.texture;
+        compUniforms.tVolume.value = volumeHistoryRead.texture;
+
+        hudAct.textContent = `Phase: ${actLabel}`;
+        hudSim.textContent = `t_sim: ${state.simTime.toFixed(1)} / ${TOTAL_DURATION.toFixed(1)} s`;
+        if (state.act === 3) {
+          hudPhys.textContent = `Epoch: ${state.physicalDays.toFixed(2)} d post-merger`;
+        } else if (state.act === 2) {
+          hudPhys.textContent = "Epoch: contact to 10^3 ms post-merger";
+        } else {
+          hudPhys.textContent = "Epoch: terminal pre-merger inspiral";
+        }
+        hudFPS.textContent = `FPS: ${state.fpsSmooth.toFixed(1)}`;
+        hudQuality.textContent = `Quality: ${qualityProfile.name}`;
+        const effectiveSteps = Math.round(volUniforms.uSteps.value * volUniforms.uStepScale.value);
+        hudSteps.textContent = `Steps: ${effectiveSteps}`;
+      }
+
+      function onResize() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        baseTarget.setSize(w, h);
+
+        const volSize = getVolumeDimensions(w, h);
+        volumeCurrentTarget.setSize(volSize.w, volSize.h);
+        volumeHistoryTargetA.setSize(volSize.w, volSize.h);
+        volumeHistoryTargetB.setSize(volSize.w, volSize.h);
+
+        volumeMaterial.uniforms.uResolution.value.set(volSize.w, volSize.h);
+        compositeMaterial.uniforms.uResolution.value.set(w, h);
+        compositeMaterial.uniforms.uVolumeResolution.value.set(volSize.w, volSize.h);
+        const pointScale = Math.min(window.devicePixelRatio, 2.0);
+        burstMat.uniforms.uScale.value = pointScale;
+        starfieldMat.uniforms.uScale.value = pointScale;
+        state.forceHistoryReset = true;
+      }
+
+      window.addEventListener("resize", onResize);
+
+      setQualityTier(params.qualityTier, true);
+      setDefaultCameraView();
+
+      const clock = new THREE.Clock();
+      let prevTime = performance.now() * 0.001;
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const now = performance.now() * 0.001;
+        const delta = Math.min(0.05, now - prevTime);
+        prevTime = now;
+
+        updateTimeline(delta);
+        updatePerformance(delta);
+
+        if (!params.autoQuality && state.currentQualityTier !== params.qualityTier) {
+          setQualityTier(params.qualityTier, true);
+        }
+
+        controls.update();
+        const camPosDelta = camera.position.distanceTo(prevCamPos);
+        const camQuatDot = clamp(Math.abs(camera.quaternion.dot(prevCamQuat)), 0.0, 1.0);
+        const camAngDelta = 2.0 * Math.acos(camQuatDot);
+        state.cameraMotion = camPosDelta + camAngDelta * 3.5;
+        if (camPosDelta > 0.0022 || camAngDelta > 0.0022) {
+          state.forceHistoryReset = true;
+        }
+        prevCamPos.copy(camera.position);
+        prevCamQuat.copy(camera.quaternion);
+
+        const elapsed = clock.getElapsedTime();
+        burstMat.uniforms.uTime.value = elapsed;
+        starfieldMat.uniforms.uTime.value = elapsed;
+        updateAct(elapsed);
+
+        renderer.setRenderTarget(baseTarget);
+        renderer.clear();
+        renderer.render(scene, camera);
+
+        renderer.setRenderTarget(volumeCurrentTarget);
+        renderer.clear();
+        renderer.render(volumeScene, postCamera);
+
+        temporalMaterial.uniforms.tCurrent.value = volumeCurrentTarget.texture;
+        temporalMaterial.uniforms.tHistory.value = volumeHistoryRead.texture;
+        renderer.setRenderTarget(volumeHistoryWrite);
+        renderer.clear();
+        renderer.render(temporalScene, postCamera);
+        swapVolumeHistoryTargets();
+        compositeMaterial.uniforms.tVolume.value = volumeHistoryRead.texture;
+
+        renderer.setRenderTarget(null);
+        renderer.clear();
+        renderer.render(compositeScene, postCamera);
+      }
+
+      animate();
+    </script>
+  </body>
+</html>
